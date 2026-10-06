@@ -6,25 +6,13 @@ use std::{
         BufRead,
         BufReader,
     },
-    fs::File,
+    fs::{File},
 };
 
 #[derive(Debug)]
 enum Token {
-    Number(i64), // 1
-    Identifier(char), // =
-
-    Variable(char),
-    
-    Plus,
-    Minus,
-    Star,
-    Slash,
-
-    LeftParen,
-    RightParen,
-
-    Print,
+    Number(i64),
+    Plus
 }
 
 #[derive(Debug)]
@@ -32,89 +20,75 @@ struct Lexer {
     tokens: Vec<Token>
 }
 
-impl Lexer {
-    fn is_print(input: &str) -> bool {
-        let mut iter = input.chars().peekable();
-        let keyword_start = 'p';
-        
-        while let Some(&c) = iter.peek() {
-            if c == keyword_start {
-                let mut word = String::new();
-                while let Some(&next_c) = iter.peek() {
-                    if next_c.is_alphabetic() {
-                        word.push(iter.next().unwrap())
-                    }
-                }
-                return true
-            } else {
-                return false
-            }
-        }
-        panic!("Couldn't iterate over characters")
+enum Expr {
+    Add(i64, i64)
+}
+
+fn evaluate(expr: Expr) -> i64 {
+    match expr {
+        Expr::Add(a, b) => a + b,
     }
-    
+}
+
+fn parse(tokens: &[Token]) -> Expr {
+    let left = match tokens[0] {
+        Token::Number(n) => n,
+        _ => panic!("Expected number!")
+    };
+
+    match tokens[1] {
+        Token::Plus => {},
+        _ => panic!("Expected +"),
+    }
+
+    let right = match tokens[2] {
+        Token::Number(n) => n,
+        _ => panic!("Expected number")
+    };
+
+    Expr::Add(left, right)
+}
+
+impl Lexer {
     fn new(input: &str) -> Self {
         let tokens = input
             .chars()
-            .peekable()
             .filter(|t| !t.is_ascii_whitespace())
             .map(|c| match c {
                 '0'..'9' => {
-                    let num: i64 = match c.to_string().parse() {
-                        Ok(num) => num,
-                        Err(_) => {
-                            println!("Couldn't parse the input '{}' to a number", c);
-                            panic!("Panicking..")
-                        }
-                    };
-                    Token::Number(num)
-                },
-                '=' => Token::Identifier(c),
-                '+' => Token::Plus,
-                '-' => Token::Minus,
-                '*' => Token::Star,
-                '/' => Token::Slash,
-                '(' => Token::LeftParen,
-                ')' => Token::RightParen,
-                'p' => {
-                    if Self::is_print(input) {
-                        Token::Print
-                    } else {
-                        Token::Variable(c)
+                    match c.to_string().parse::<i64>() {
+                        Ok(num) => Token::Number(num),
+                        Err(_) => panic!("Couldn't parse character as number")
                     }
                 },
-                'a'..'z' | 'A'..'Z' => Token::Variable(c),
-                _ => panic!("Found unexpected token!")
+                '+' => Token::Plus,
+                _ => panic!("Unsupported token!")
             }).collect::<Vec<_>>();
-
-        Self {
-            tokens
-        }
+        Self{tokens}
     }
 }
 
 fn main() {
-    println!("Enter filename of the file to analyze");
+    println!("Enter path of file to analyze");
     print!(">> ");
-
     io::stdout().flush().unwrap();
-    
+
     let mut input = String::new();
 
-    std::io::stdin()
+    io::stdin()
         .read_line(&mut input)
-        .expect("Couldn't read input!");
+        .expect("Couldn't read input");
 
-    println!("Input is: {}", input);
-
-    let input = input.trim();
-
-    let file = File::open(&input).expect("Couldn't open file");
+    let file = File::open(&input.trim()).unwrap();
     let reader = BufReader::new(file);
-    
+
     for line in reader.lines() {
         let line = line.unwrap();
-        let lexed = Lexer::new(&line);
-        println!("{lexed:?}");
+
+        let lexed = Lexer::new(line.as_str());
+        let expr = parse(&lexed.tokens);
+        let result = evaluate(expr);
+        println!("Result of {} is {}", line, result)
     }
+    
 }
