@@ -145,6 +145,49 @@ fn parse(tokens: &[Token]) -> Expression {
                                 _ => panic!("Expected an operator!")
                             }
                         },
+                        Token::Variable(var2) => {
+                            let lock = STACK.lock().unwrap();
+                            if let Some(num1) = lock.get(&var2) {
+                                match tokens[3] {
+                                    Token::Plus => {
+                                        match tokens[4] {
+                                            Token::Number(num2) => {
+                                                return Expression::Add(*num1, num2, None)
+                                            },
+                                            _ => panic!("Expected a number!")
+                                        }
+                                    },
+                                    Token::Minus => {
+                                        match tokens[4] {
+                                            Token::Number(num2) => {
+                                                return Expression::Subtract(*num1, num2, None)
+                                            },
+                                            _ => panic!("Expected a number!")
+                                        }
+                                    },
+                                    Token::Star => {
+                                        match tokens[4] {
+                                            Token::Number(num2) => {
+                                                return Expression::Multiply(*num1, num2, None)
+                                            },
+                                            _ => panic!("Expected a number!")
+                                        }
+                                    },
+                                    Token::Slash => {
+                                        match tokens[4] {
+                                            Token::Number(num2) => {
+                                                return Expression::Divide(*num1, num2, None)
+                                            },
+                                            _ => panic!("Expected a number!")
+                                        }
+                                    },
+                                    _ => panic!("Expected a number!")
+                                }
+                            } else {
+                                let msg = format!("The variable {} has no value stored", var2);
+                                panic!("{msg}")
+                            }
+                        },
                         _ => panic!("Expected a number!"),
                     };
                 },
