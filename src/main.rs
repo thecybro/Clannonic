@@ -513,13 +513,23 @@ fn parser(tokens: &[Token]) -> Expression {
                     }
                 },
                 Token::Number(num) => {
-                    return Expression::PrintVal(*num)
+                    match &tokens[2] {
+                        Token::Eof => {
+                            return Expression::PrintVal(*num)
+                        },
+                        _ => panic!("Got an unexpected value after {num}")
+                    }
                 },
                 Token::Variable(var) => {
-                    if let Some(var_val) = STACK.lock().unwrap().get(var) {
-                        return Expression::PrintVal(*var_val)
-                    } else {
-                        panic!("The variable {var} has no value!")
+                    match &tokens[2] {
+                        Token::Eof => {
+                            if let Some(var_val) = STACK.lock().unwrap().get(var) {
+                                return Expression::PrintVal(*var_val)
+                            } else {
+                                panic!("The variable {var} has no value!")
+                            }
+                        },
+                        _ => panic!("Got an unexpected value after {var}")
                     }
                 }
                 _ => panic!("Expected either parantheses or a value/variable")
