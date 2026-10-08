@@ -26,7 +26,7 @@ impl Parser {
         match &tokens[0] {
             Token::Variable(var1) => {
                 if length_of_tokens <= 1 {
-                    panic!("Expected = after {var1}")
+                    panic!("Expected '=' after variable {var1}")
                 }
                 match tokens[1] {
                     Token::Equals => {
@@ -671,7 +671,7 @@ impl Parser {
                             _ => panic!("Expected either a variable or a number after {var1} =")
                         }
                     },
-                    _ => panic!("Expected = after {var1}")
+                    _ => panic!("Expected '=' after variable {var1}")
                 }
         },
             Token::Print => {
