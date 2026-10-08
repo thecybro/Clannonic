@@ -54,10 +54,6 @@ impl Lexer {
                         tokens.push(Token::Equals);
                         continue
                     },
-                    "print" => {
-                        tokens.push(Token::Print);
-                        continue
-                    },
                     _ => {
                         tokens.push(Token::Variable(word.to_string()));
                         continue

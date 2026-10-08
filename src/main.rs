@@ -37,7 +37,6 @@ enum Token {
     
     Variable(String),
     Equals,
-    Print,
 
     Eof,
 }
@@ -55,8 +54,6 @@ enum Operator {
 #[derive(Debug)]
 enum Expression {
     Operation(Operator),
-    PrintVal(f64),
-    PrintComp(Operator),
     Skip,
 }
 

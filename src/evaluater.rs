@@ -72,12 +72,6 @@ impl Evaluater {
                 let _ = handle_operation(operator);
                 None
             },
-            // Print the value we had stored in the store
-            Expression::PrintVal(val) => Some(val),
-            Expression::PrintComp(operator) => {
-                // compute the value, then return it (cuz of print)
-                Some(handle_operation(operator))
-            },
             _ => None
         }
     }
