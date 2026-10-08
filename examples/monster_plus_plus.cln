@@ -1,0 +1,1 @@
+if(x==10){message="hello world";foo123=999+888*777;if(message!=""){bar(_123)=42;}}else{x=x+1;}

@@ -1,93 +1,92 @@
 
 use std::{
-    io::{
-        // self,
-        // Write,
-        BufRead,
-        BufReader,
-    },
-    fs::File,
+    env,
+    fs,
 };
-use std::env;
-use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
 
-
-mod parser;
+// mod parser;
 mod lexer;
-mod evaluater;
-mod store;
+// mod evaluater;
+// mod store;
 
-static STACK: LazyLock<Mutex<HashMap<String, f64>>> = LazyLock::new(|| {
-    Mutex::new(HashMap::new()) // start with no elements
-});
+use lexer::Lexer;
 
-struct Store;
-
-#[derive(Debug)]
-enum Token {
-    Number(f64),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenKind {
+    Identifier, 
+    Integer,
+    Float,
+    String,
+    
     Plus,
     Minus,
     Star,
     Slash,
 
+    Space,
+    
+    Equals,
+    EqualsEquals,
+
+    GreaterThan,
+    LessThan,
+    Not,
+    
+    GreaterOrEquals,
+    LessOrEquals,
+
     LeftParen,
     RightParen,
+
+    LeftBrace,
+    RightBrace,
+
+    SemCol,
+    Comma,
     
-    Variable(String),
-    Equals,
+    Let,
+    For,
+    While,
+    
+    Fn,
+    If,
+    Else,
+    Return,
 
     Eof,
 }
 
-#[derive(Debug)]
-enum Operator {
-    // Option<String> is the variable
-    Add(f64, f64, Option<String>),
-    Subtract(f64, f64, Option<String>),
-    Multiply(f64, f64, Option<String>),
-    Divide(f64, f64, Option<String>),
-    Insert(String, f64),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
 }
 
-#[derive(Debug)]
-enum Expression {
-    Operation(Operator),
-    Skip,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Token<'src> {
+    pub kind: TokenKind, // what our lexer gives
+    pub lexeme: &'src str, // the actual text that we had lexed
+    pub span: Span // how long is it? it's starting and ending position
 }
-
-struct Lexer {
-    tokens: Vec<Token>
-}
-
-struct Parser;
-
-struct Evaluater;
 
 fn main() {
-    let mut input = String::new();
-
     let args: Vec<String> = env::args().collect();
+    let mut path = String::new();
 
-    if args.len() > 1 {
-        input = args[1].clone();
-    } else {
-        println!("Clanix interpreter")
-    }
     
-    let file = File::open(&input.trim()).unwrap();
-    let reader = BufReader::new(file);
+    if args.len() > 1 {
+        path = args[1].clone();
+    } else {
+        println!("Clannonic")
+    }
 
-    for line in reader.lines() {
-        let line = line.unwrap();
+    let msg = format!("Couldn't read file {path}");
 
-        // println!("Line: {}", line);
+    let source = fs::read_to_string(path.trim()).expect(&msg);
 
-        let lexed = Lexer::new(&line);
-        let parsed = Parser::new(&lexed.tokens);
-        if let Some(result) = Evaluater::new(parsed) {
-            println!("{}", result)
-        }
+    let tokens = Lexer::new(&source);
+
+    for token in tokens {
+        println!("{token:?}")
     }
 }

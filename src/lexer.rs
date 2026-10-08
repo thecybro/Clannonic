@@ -159,6 +159,8 @@ impl<'a> Lexer<'a> {
     fn keyword_or_identifier(&self, start: usize) -> TokenKind {
         match &self.source[start..self.position] {
             "let" => TokenKind::Let,
+            "for" => TokenKind::For,
+            "while" => TokenKind::While,
             "fn" => TokenKind::Fn,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
@@ -255,6 +257,26 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 self.token(TokenKind::LeftParen, start)
             },
+            '{' => {
+                self.advance();
+                self.token(TokenKind::LeftBrace, start)
+            },
+            '}' => {
+                self.advance();
+                self.token(TokenKind::RightBrace, start)
+            },
+            ';' => {
+                self.advance();
+                self.token(TokenKind::SemCol, start)
+            },
+            ',' => {
+                self.advance();
+                self.token(TokenKind::Comma, start)
+            },
+            '!' => {
+                self.advance();
+                self.token(TokenKind::Not, start)
+            },
             '"' => {
                 self.consume_string();
                 self.token(TokenKind::String, start)
@@ -275,7 +297,7 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 self.token(TokenKind::Slash, start)
             },
-            _ => panic!("Invalid token!")
+            _ => panic!("Invalid token: {character}")
         }
         
     }
