@@ -23,6 +23,9 @@ pub enum TokenKind {
     Star,
     Slash,
 
+    DSlash, // //
+    TSlash, // ///
+    
     Space,
     
     Equals,
@@ -35,14 +38,18 @@ pub enum TokenKind {
     GreaterOrEquals,
     LessOrEquals,
 
-    LeftParen,
-    RightParen,
+    LParen,
+    RParen,
 
     LeftBrace,
     RightBrace,
 
-    SemCol,
-    Comma,
+    SQuote, // '
+    DQuote, // ""
+    Col, // :
+    SemCol, // ;
+    Comma, // ,
+    Dot, // .
     
     Let,
     For,

@@ -122,6 +122,22 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Check the string slice from the start position to the current
+    /// position and see if we have consumed a keyword, if yes, return
+    /// the appropriate keyword, if not, just return as Identifier
+    fn keyword_or_identifier(&self, start: usize) -> TokenKind {
+        match &self.source[start..self.position] {
+            "let" => TokenKind::Let,
+            "for" => TokenKind::For,
+            "while" => TokenKind::While,
+            "fn" => TokenKind::Fn,
+            "if" => TokenKind::If,
+            "else" => TokenKind::Else,
+            "return" => TokenKind::Return,
+            _ => TokenKind::Identifier
+        }
+    }
+    
     /// Keep consuming/advancing until we keep getting numbers and
     /// stop the moment we get anything else
     fn consume_integer(&mut self) {
@@ -153,22 +169,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Check the string slice from the start position to the current
-    /// position and see if we have consumed a keyword, if yes, return
-    /// the appropriate keyword, if not, just return as Identifier
-    fn keyword_or_identifier(&self, start: usize) -> TokenKind {
-        match &self.source[start..self.position] {
-            "let" => TokenKind::Let,
-            "for" => TokenKind::For,
-            "while" => TokenKind::While,
-            "fn" => TokenKind::Fn,
-            "if" => TokenKind::If,
-            "else" => TokenKind::Else,
-            "return" => TokenKind::Return,
-            _ => TokenKind::Identifier
-        }
-    }
-    
+    /// It returns the next token(struct) if it's available; whenever someone calls it
+    /// Its callers dont have to think of whitespaces, raw characters or anything at all
+    /// All they care about it that whenever they call it, they will get a valid token
+    /// Or panic if the next character is an invalid token
     fn next_token(&mut self) -> Token<'a> {  
         self.skip_whitespace();
         
@@ -251,11 +255,11 @@ impl<'a> Lexer<'a> {
             }
             ')' => {
                 self.advance();
-                self.token(TokenKind::RightParen, start)
+                self.token(TokenKind::RParen, start)
             },
             '(' => {
                 self.advance();
-                self.token(TokenKind::LeftParen, start)
+                self.token(TokenKind::LParen, start)
             },
             '{' => {
                 self.advance();
@@ -269,9 +273,17 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 self.token(TokenKind::SemCol, start)
             },
+            ':' => {
+                self.advance();
+                self.token(TokenKind::Col, start)
+            },
             ',' => {
                 self.advance();
                 self.token(TokenKind::Comma, start)
+            },
+            '.' => {
+                self.consume_string();
+                self.token(TokenKind::Dot, start)
             },
             '!' => {
                 self.advance();
@@ -279,7 +291,11 @@ impl<'a> Lexer<'a> {
             },
             '"' => {
                 self.consume_string();
-                self.token(TokenKind::String, start)
+                self.token(TokenKind::DQuote, start)
+            },
+            '\'' => {
+                self.consume_string();
+                self.token(TokenKind::SQuote, start)
             },
             '+' => {
                 self.advance();
@@ -294,8 +310,42 @@ impl<'a> Lexer<'a> {
                 self.token(TokenKind::Star, start)
             },
             '/' => {
-                self.advance();
-                self.token(TokenKind::Slash, start)
+                // Check whether we have just 1 slash or 2 slashes or 3 slashes,
+                // if we have 2, then consume both and return DSlash, indicating double slashes,
+                // if the next one is not a slash, just return Slash.
+                // 
+                // If we have 3 consecutive slashes however, consume all 3 and return TSlash,
+                // indicating 3 slashes
+                if let Some(next) = self.peek() {
+                    // Peek and see if the next character is a slash, if yes, consume one character
+                    // and then peek again, if the next character is also a slash, then we have encountered
+                    // 3 slashes in a row, so we return TSlash
+                    if next == '/' {
+                        // We call this advance() here to be able to peek more, if we hadn't used it here,
+                        // we would have the same position as above, so we would be peeking to where we are
+                        // right now
+                        self.advance();
+                        if let Some(next2) = self.peek() {
+                            if next2 == '/' {
+                                self.advance();
+                                self.advance();
+                                self.token(TokenKind::TSlash, start)
+                            } else {
+                                self.advance();
+                                self.token(TokenKind::DSlash, start)
+                            }
+                        }  else {
+                            self.advance();
+                            self.token(TokenKind::DSlash, start)
+                        }
+                    } else {
+                        self.advance();
+                        self.token(TokenKind::Slash, start)
+                    }
+                } else {
+                    self.advance();
+                    self.token(TokenKind::Slash, start)
+                }
             },
             _ => panic!("Invalid token: {character}")
         }
