@@ -4,12 +4,13 @@ use std::{
     fs,
 };
 
-// mod parser;
+mod parser;
 mod lexer;
 // mod evaluater;
 // mod store;
 
 use lexer::Lexer;
+use parser::Parser;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
@@ -25,6 +26,7 @@ pub enum TokenKind {
 
     DSlash, // //
     TSlash, // ///
+    MSlash, // Any number of slashes above 3
     
     Space,
     
@@ -41,8 +43,8 @@ pub enum TokenKind {
     LParen,
     RParen,
 
-    LeftBrace,
-    RightBrace,
+    LBrace,
+    RBrace,
 
     SQuote, // '
     DQuote, // ""
@@ -51,6 +53,22 @@ pub enum TokenKind {
     Comma, // ,
     Dot, // .
     
+    // Let,
+    // For,
+    // While,
+    // 
+    // Fn,
+    // If,
+    // Else,
+    // Return,
+
+    Keyword(Keyword),
+    
+    Eof,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Keyword {
     Let,
     For,
     While,
@@ -59,8 +77,6 @@ pub enum TokenKind {
     If,
     Else,
     Return,
-
-    Eof,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,10 +86,29 @@ pub struct Span {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Token<'src> {
+pub struct Token<'a> {
     pub kind: TokenKind, // what our lexer gives
-    pub lexeme: &'src str, // the actual text that we had lexed
+    pub lexeme: &'a str, // the actual text that we had lexed
     pub span: Span // how long is it? it's starting and ending position
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryOp {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expr {
+    Integer(i64),
+    Identifier(String),
+    Binary {
+        left: Box<Expr>,
+        operator: BinaryOp,
+        right: Box<Expr>,
+    }
 }
 
 fn main() {
@@ -91,9 +126,13 @@ fn main() {
 
     let source = fs::read_to_string(path.trim()).expect(&msg);
 
-    let tokens = Lexer::new(&source);
-
-    for token in tokens {
-        println!("{token:?}")
+    let mut tokens = vec![];
+    
+    let lexed = Lexer::new(&source);
+    for token in lexed {
+        // println!("{token:#?}");
+        tokens.push(token)
     }
+    let parsed = Parser::new(tokens).parse();
+    println!("{parsed:#?}")
 }
