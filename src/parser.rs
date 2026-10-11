@@ -23,6 +23,10 @@ type Result<T> = std::result::Result<T, ParseError>;
 
 /// Public methods for the parser
 impl<'a> Parser<'a> {
+    /// The method that the caller needs to first call by passing a vector of
+    /// tokens to later parse those tokens
+    /// 
+    /// Initialize the parser
     pub fn new(tokens: Vec<Token<'a>>) -> Self {
         Self {
             tokens,
@@ -30,10 +34,14 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Create an ast by calling the entry point parser function, which later
+    /// leads to a recursive calling between itself, add operations parser,
+    /// multiplication parser and primary parser which calls the add/multiplication
+    /// parser or simply returns a number or identifier/variable by pattern matching
     pub fn parse(&mut self) -> Result<Expr> {
         let ast = self.parse_expression()?;
         
-        if self.is_at_end() {
+        if !self.is_at_end() {
             return Err(
                 ParseError::UnexpectedToken(
                 self.current()?.kind
@@ -175,7 +183,7 @@ impl<'a> Parser<'a> {
     }
 
     fn is_at_end(&self) -> bool {
-        self.position > self.tokens.len()
+        self.position >= self.tokens.len()
     }
 }
 
