@@ -14,8 +14,9 @@ pub struct Parser<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
     Eof,
-    InvalidToken(TokenKind),
-    UnexpectedToken(TokenKind),
+    InvalidToken(String),
+    UnexpectedToken(String),
+    TokenExpected(String),
     StringToI64,
 }
 
@@ -44,7 +45,7 @@ impl<'a> Parser<'a> {
         if !self.is_at_end() {
             return Err(
                 ParseError::UnexpectedToken(
-                self.current()?.kind
+                self.current()?.lexeme.to_string()
             ));
         }
         Ok(ast)
@@ -53,10 +54,29 @@ impl<'a> Parser<'a> {
 
 /// Private parsing methods
 impl<'a> Parser<'a> {
+    /// Start the parsing by calling the operation parser with least precedence;
+    /// here, we called addition (which also performs subtraction).
+    /// 
+    /// We grouped addition with subtraction and multiplication with division
+    /// because both have equal precedence and we must perform them from left to right
     fn parse_expression(&mut self) -> Result<Expr> {
         self.parse_addition()
     }
 
+    ///
+    /// Since multiplication/division has higher precedence, we call parse_multiplication()
+    /// to check if we have any multiplication/division operation, if there is any, it will
+    /// set the return value in left expression
+    /// 
+    /// If we haven't reached the end of file yet; meaning we still get the current token,
+    /// we will look for plus/minus operator and then consume it (it's just the increase in
+    /// our current positino actually).
+    /// And then we will call the parse_multiplication() to do the operation again and set it
+    /// in the right operation by putting plus/minus operator in between.
+    /// 
+    /// The reason we dont have to check if there are still tokens left after consuming the operator
+    /// is that; the parse_multiplication() already does that internally
+    ///
     fn parse_addition(&mut self) -> Result<Expr> {
         let mut left = self.parse_multiplication()?;
         
@@ -68,7 +88,6 @@ impl<'a> Parser<'a> {
             };
 
             self.advance()?;
-
             let right = self.parse_multiplication()?;
 
             left = Expr::Binary {
@@ -82,6 +101,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_multiplication(&mut self) -> Result<Expr> {
+        /*
+         * Call parse_primary() to get the numbers/identifiers
+         * or a binary (either containing numbers/identifiers or other binaries)
+         */
         let mut left = self.parse_primary()?;
 
         while let Ok(token) = self.current() {
@@ -91,6 +114,10 @@ impl<'a> Parser<'a> {
                 _ => break,
             };
 
+            /*
+             * Consume the operator and call again to get the right numbers/identifiers
+             * or a binary
+             */
             self.advance()?;
             let right = self.parse_primary()?;
 
@@ -103,6 +130,11 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
+    /*
+     * This is the actual fundamental function that identifies what we have and returns
+     * numbers or identifiers or expressions by pattern matching
+     * Others just indirectly call it and add respective operators; they dont do the underlying work
+     */
     fn parse_primary(&mut self) -> Result<Expr> {
         let token = self.current()?;
         
@@ -123,6 +155,15 @@ impl<'a> Parser<'a> {
                     )
                 )
             },
+            /*
+             * This is the start of other expression inclosed in () so we have to consume the (
+             * and parse the expression again, which will not touch the closing parenthesis ),
+             * so we have to consume the closing parenthesis ) if we encountered it, consume it 
+             * and return the expression; indicating success.
+             * 
+             * If we didn't encounter the closing parenthesis, we return error saying we expected
+             * a closing parenthesis
+             */
             TokenKind::LParen => {
                 self.advance()?;
                 let expr = self.parse_expression()?; // Where recursion happens
@@ -135,15 +176,15 @@ impl<'a> Parser<'a> {
                     _ => {
                         println!("{:#?}", current);
                         return Err(
-                            ParseError::UnexpectedToken(
-                            self.current()?.kind
+                            ParseError::TokenExpected(
+                            ")".to_string()
                         ))
                     }
                 }
             },
             _ => Err(
                 ParseError::InvalidToken(
-                token.kind
+                token.lexeme.to_string()
             ))
         }
     }
@@ -151,10 +192,15 @@ impl<'a> Parser<'a> {
 
 /// All the helper methods for the parser
 impl<'a> Parser<'a> {
+    /// If there are some tokens left, we will most likely get an Ok(),
+    /// from the get statement below
     fn current(&self) -> Result<&Token<'a>> {
         if let Some(current) = self.tokens.get(self.position) {
+            // Return the token from the current position
             Ok(current)
         } else {
+            // If we got None, maybe there are no tokens left, meaning we are
+            // at Eof
             Err(ParseError::Eof)
         }
     }
@@ -178,6 +224,8 @@ impl<'a> Parser<'a> {
         }
     
         self.position += 1;
+        // Return the token from 1 position prior, which will be the one
+        // which we just consumed, because we had just done +1
         self.tokens
             .get(self.position - 1)
             .ok_or(ParseError::Eof)
