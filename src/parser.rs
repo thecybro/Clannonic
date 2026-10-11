@@ -2,7 +2,9 @@
 use crate::{
     TokenKind,
     Token,
+    Keyword,
     Expr,
+    Stmt,
     BinaryOp
 };
 
@@ -17,6 +19,8 @@ pub enum ParseError {
     InvalidToken(String),
     UnexpectedToken(String),
     TokenExpected(String),
+    NotAKeyword(String),
+    // UnsupportedKeyword(String),
     StringToI64,
 }
 
@@ -39,8 +43,8 @@ impl<'a> Parser<'a> {
     /// leads to a recursive calling between itself, add operations parser,
     /// multiplication parser and primary parser which calls the add/multiplication
     /// parser or simply returns a number or identifier/variable by pattern matching
-    pub fn parse(&mut self) -> Result<Expr> {
-        let ast = self.parse_expression()?;
+    pub fn parse(&mut self) -> Result<Stmt> {
+        let ast = self.parse_statement()?;
         
         if !self.is_at_end() {
             return Err(
@@ -52,7 +56,97 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Private parsing methods
+/// Private parsing methods for keywords
+impl<'a> Parser<'a> {
+    fn parse_statement(&mut self) -> Result<Stmt> {
+        match self.keyword()? {
+            Keyword::Let => {
+                self.parse_let_stmt()
+            },
+            Keyword::If => {
+                self.parse_if_stmt()
+            }
+            _ => return Err(
+                ParseError::NotAKeyword(
+                    self.current()?.lexeme.to_string()
+                )
+            )
+        }
+    }
+
+    fn parse_let_stmt(&mut self) -> Result<Stmt> {     
+        self.advance()?;
+        
+        if self.current()?.kind != TokenKind::Identifier {
+            return Err(
+                ParseError::InvalidToken(
+                    self.current()?.lexeme.to_string()
+                )
+            )
+        }
+
+        // Consume the identifier we confirmed
+        let ident = self.advance()?.lexeme.to_string();
+
+        if self.current()?.kind != TokenKind::Equals {
+            println!("Second {:#?}", self.current()?);
+            return Err(
+                ParseError::InvalidToken(
+                    self.current()?.lexeme.to_string()
+                )
+            )
+        }
+
+        // We confirmed it's an equals, so consume it
+        self.advance()?;
+
+        let expr = self.parse_expression()?;
+
+        println!("Crosse");
+        
+        Ok(Stmt::Let {
+            keyword: Keyword::Let,
+            identifier: ident,
+            expression: expr
+        })
+        
+    }
+
+    fn parse_if_stmt(&mut self) -> Result<Stmt> {
+        self.advance()?;
+        
+        let condition = self.parse_expression()?;
+
+        if self.current()?.kind != TokenKind::LBrace {
+            let lbrace = "{";
+            let current = self.current()?.lexeme.to_string();
+            let msg = format!("Expected '{lbrace}' but found {current} instead");
+            
+            return Err(
+                ParseError::InvalidToken(msg)
+            )
+        }
+
+        // Consume the { we found
+        self.advance()?;
+
+        let body = self.parse_expression()?;
+
+        if self.current()?.kind == TokenKind::RBrace {
+            self.advance()?;
+        }
+        
+        Ok(
+            Stmt::If {
+                keyword: Keyword::If,
+                condition: condition,
+                body: Box::new(body)
+            }
+        )
+    }
+}
+
+/// Private parsing methods for expressions
 impl<'a> Parser<'a> {
     /// Start the parsing by calling the operation parser with least precedence;
     /// here, we called addition (which also performs subtraction).
@@ -62,7 +156,7 @@ impl<'a> Parser<'a> {
     fn parse_expression(&mut self) -> Result<Expr> {
         self.parse_addition()
     }
-
+    
     ///
     /// Since multiplication/division has higher precedence, we call parse_multiplication()
     /// to check if we have any multiplication/division operation, if there is any, it will
@@ -148,10 +242,9 @@ impl<'a> Parser<'a> {
                 }
             },
             TokenKind::Identifier => {
-                let identifier = self.advance()?;
                 Ok(
                     Expr::Identifier(
-                        identifier.lexeme.to_string()
+                        self.advance()?.lexeme.to_string()
                     )
                 )
             },
@@ -240,6 +333,19 @@ impl<'a> Parser<'a> {
             .ok_or(ParseError::Eof)
     }
 
+    fn keyword(&self) -> Result<Keyword> {        
+        match self.current()?.kind {
+            TokenKind::Keyword(keyword) => {
+                Ok(keyword)
+            },
+            _ => return Err(
+                ParseError::NotAKeyword(
+                    self.current()?.lexeme.to_string()
+                )
+            )
+        }
+    }
+    
     fn is_at_end(&self) -> bool {
         self.position >= self.tokens.len()
     }

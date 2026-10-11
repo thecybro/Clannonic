@@ -52,15 +52,6 @@ pub enum TokenKind {
     SemCol, // ;
     Comma, // ,
     Dot, // .
-    
-    // Let,
-    // For,
-    // While,
-    // 
-    // Fn,
-    // If,
-    // Else,
-    // Return,
 
     Keyword(Keyword),
     
@@ -110,6 +101,21 @@ pub enum Expr {
         right: Box<Expr>,
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stmt {
+    Let {
+        keyword: Keyword,
+        identifier: String,
+        expression: Expr
+    },
+    If {
+        keyword: Keyword,
+        condition: Expr,
+        body: Box<Expr>,
+    }
+}
+
 
 fn main() {
     let args: Vec<String> = env::args().collect();
