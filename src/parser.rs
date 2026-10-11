@@ -167,6 +167,15 @@ impl<'a> Parser<'a> {
             TokenKind::LParen => {
                 self.advance()?;
                 let expr = self.parse_expression()?; // Where recursion happens
+
+                if self.is_at_end() {
+                    return Err(
+                        ParseError::TokenExpected(
+                            "')' expected at the end".to_string()
+                        )
+                    )
+                }
+                
                 let current = self.current()?;
                 match current.kind {
                     TokenKind::RParen => {
