@@ -129,13 +129,14 @@ impl<'a> Parser<'a> {
                 let current = self.current()?;
                 match current.kind {
                     TokenKind::RParen => {
+                        self.advance()?;
                         return Ok(expr)
                     },
                     _ => {
-                        println!("{:#?}", self.current());
+                        println!("{:#?}", current);
                         return Err(
                             ParseError::UnexpectedToken(
-                            current.kind
+                            self.current()?.kind
                         ))
                     }
                 }
