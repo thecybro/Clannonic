@@ -132,9 +132,26 @@ impl<'a> Parser<'a> {
 
         let body = self.parse_expression()?;
 
-        if self.current()?.kind == TokenKind::RBrace {
-            self.advance()?;
+        if self.is_at_end() {
+            let lbrace = "}";
+            let msg = format!("Expected '{lbrace}' but found no tokens instead");
+            
+            return Err(
+                ParseError::InvalidToken(msg)
+            )
         }
+        
+        if self.current()?.kind != TokenKind::RBrace {
+            let lbrace = "}";
+            let current = self.current()?.lexeme.to_string();
+            let msg = format!("Expected '{lbrace}' but found {current} instead");
+            
+            return Err(
+                ParseError::InvalidToken(msg)
+            )
+        }
+
+        self.advance()?;
         
         Ok(
             Stmt::If {
