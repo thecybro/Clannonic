@@ -18,7 +18,7 @@ pub struct Parser<'a> {
 pub enum ParseError {
     Eof,
     InvalidToken(String),
-    UnexpectedToken(String),
+    // UnexpectedToken(String),
     TokenExpected(String),
     NotAKeyword(String),
     // UnsupportedKeyword(String),
@@ -44,24 +44,25 @@ impl<'a> Parser<'a> {
     /// leads to a recursive calling between itself, add operations parser,
     /// multiplication parser and primary parser which calls the add/multiplication
     /// parser or simply returns a number or identifier/variable by pattern matching
-    pub fn parse(&mut self) -> Result<Stmt> {
-        let ast = self.parse_statement()?;
+    pub fn parse(&mut self) -> Result<Vec<Stmt>> {
+        let mut ast = vec![];
+        ast.push(self.parse_statement()?);
         
-        if !self.is_at_end() {
-            println!("Couldn't finish all tokens..\n{:#?}", self.current()?);
-            println!("Position: {}\nLength: {}", self.position, self.tokens.len());
-            return Err(
-                ParseError::UnexpectedToken(
-                self.current()?.lexeme.to_string()
-            ));
+        loop {
+            if self.is_at_end() {
+                break
+            }
+
+            ast.push(self.parse_statement()?)
         }
+            
         Ok(ast)
     }
 }
 
 /// Private parsing methods for keywords
 impl<'a> Parser<'a> {
-    fn parse_statement(&mut self) -> Result<Stmt> {
+    fn parse_statement(&mut self) -> Result<Stmt> {        
         match self.keyword()? {
             Keyword::Let => {
                 self.parse_let_stmt()
@@ -80,7 +81,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_let_stmt(&mut self) -> Result<Stmt> {     
+    fn parse_let_stmt(&mut self) -> Result<Stmt> {  
         self.advance()?;
         
         if self.current()?.kind != TokenKind::Identifier {
@@ -95,7 +96,7 @@ impl<'a> Parser<'a> {
         let ident = self.advance()?.lexeme.to_string();
 
         if self.current()?.kind != TokenKind::Equals {
-            println!("Second {:#?}", self.current()?);
+            // println!("Second {:#?}", self.current()?);
             return Err(
                 ParseError::InvalidToken(
                     self.current()?.lexeme.to_string()
@@ -108,6 +109,7 @@ impl<'a> Parser<'a> {
 
         let expr = self.parse_expression()?;
 
+        // println!("After getting the expr: {:#?}\nCurrent: {:#?}", expr, self.current()?);
         
         Ok(Stmt::Let {
             keyword: Keyword::Let,
@@ -156,7 +158,7 @@ impl<'a> Parser<'a> {
             Stmt::If {
                 keyword: Keyword::If,
                 condition: condition,
-                body: Box::new(body)
+                body: body
             }
         )
     }
@@ -271,7 +273,9 @@ impl<'a> Parser<'a> {
      */
     fn parse_primary(&mut self) -> Result<Expr> {
         let token = self.current()?;
-        
+
+        // println!("Current: {:#?}", token);
+            
         match token.kind {
             TokenKind::Integer => {
                 if let Some(integer) = parse_to_i64(token.lexeme) {
@@ -282,6 +286,7 @@ impl<'a> Parser<'a> {
                 }
             },
             TokenKind::Identifier => {
+                // println!("returned the identifier");
                 Ok(
                     Expr::Identifier(
                         self.advance()?.lexeme.to_string()

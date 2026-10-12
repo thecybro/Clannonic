@@ -112,7 +112,7 @@ pub enum Stmt {
     If {
         keyword: Keyword,
         condition: Expr,
-        body: Box<Vec<Stmt>>,
+        body: Vec<Stmt>,
     }
 }
 
