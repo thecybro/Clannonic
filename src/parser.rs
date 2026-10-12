@@ -47,6 +47,7 @@ impl<'a> Parser<'a> {
         let ast = self.parse_statement()?;
         
         if !self.is_at_end() {
+            println!("Here? {:#?}", self.current()?);
             return Err(
                 ParseError::UnexpectedToken(
                 self.current()?.lexeme.to_string()
@@ -102,7 +103,6 @@ impl<'a> Parser<'a> {
 
         let expr = self.parse_expression()?;
 
-        println!("Crosse");
         
         Ok(Stmt::Let {
             keyword: Keyword::Let,
@@ -116,7 +116,7 @@ impl<'a> Parser<'a> {
         self.advance()?;
         
         let condition = self.parse_expression()?;
-
+        
         if self.current()?.kind != TokenKind::LBrace {
             let lbrace = "{";
             let current = self.current()?.lexeme.to_string();
@@ -129,29 +129,18 @@ impl<'a> Parser<'a> {
 
         // Consume the { we found
         self.advance()?;
+        let mut body = vec![];
 
-        let body = self.parse_statement()?;
-
-        if self.is_at_end() {
-            let lbrace = "}";
-            let msg = format!("Expected '{lbrace}' but found no tokens instead");
+        while let Ok(current) = self.current() {
+            if current.kind == TokenKind::RBrace {
+                self.advance()?;
+                
+                break
+            }
             
-            return Err(
-                ParseError::InvalidToken(msg)
-            )
-        }
-        
-        if self.current()?.kind != TokenKind::RBrace {
-            let lbrace = "}";
-            let current = self.current()?.lexeme.to_string();
-            let msg = format!("Expected '{lbrace}' but found {current} instead");
-            
-            return Err(
-                ParseError::InvalidToken(msg)
-            )
-        }
+            body.push(self.parse_statement()?);
 
-        self.advance()?;
+        }
         
         Ok(
             Stmt::If {
@@ -161,6 +150,7 @@ impl<'a> Parser<'a> {
             }
         )
     }
+
 }
 
 /// Private parsing methods for expressions

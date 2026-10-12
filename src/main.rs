@@ -112,10 +112,9 @@ pub enum Stmt {
     If {
         keyword: Keyword,
         condition: Expr,
-        body: Box<Stmt>,
+        body: Box<Vec<Stmt>>,
     }
 }
-
 
 fn main() {
     let args: Vec<String> = env::args().collect();
