@@ -112,7 +112,7 @@ pub enum Stmt {
     If {
         keyword: Keyword,
         condition: Expr,
-        body: Box<Expr>,
+        body: Box<Stmt>,
     }
 }
 

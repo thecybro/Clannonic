@@ -130,7 +130,7 @@ impl<'a> Parser<'a> {
         // Consume the { we found
         self.advance()?;
 
-        let body = self.parse_expression()?;
+        let body = self.parse_statement()?;
 
         if self.is_at_end() {
             let lbrace = "}";
