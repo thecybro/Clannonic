@@ -1,4 +1,4 @@
-//! This is the crate for the language I am experimenting with, whose name is not yet
+//! This is the language I am experimenting with, whose name is not yet
 //! decided but I am going with **clannonic** for now.
 //! 
 //! For now, it's just a test crate but later when it can run/evaluate basic code,

@@ -440,10 +440,13 @@ impl<'a> Parser<'a> {
                     }
                 }
             },
-            _ => Err(
-                ParseError::InvalidToken(
-                token.lexeme.to_string()
-            ))
+            _ => {
+                println!("From primary");
+                Err(
+                    ParseError::InvalidToken(
+                    token.lexeme.to_string()
+                ))
+            }
         }
     }
 }
