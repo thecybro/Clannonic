@@ -47,8 +47,9 @@ impl<'a> Parser<'a> {
     /// parser or simply returns a number or identifier/variable by pattern matching
     pub fn parse(&mut self) -> Result<Vec<Stmt>> {
         let mut ast = vec![];
-        ast.push(self.parse_statement()?);
-        
+
+        // Loop over the tokens and parse the statements until we reach
+        // the end of the tokens
         loop {
             if self.is_at_end() {
                 break
@@ -57,6 +58,10 @@ impl<'a> Parser<'a> {
             ast.push(self.parse_statement()?)
         }
 
+        // If somehow we didn't reach the end (which is unlikely cuz
+        // the loop above ensures it runs until we reach the end)
+        // But still, we aren't losing anything by keeping this, 
+        // are we?
         if !self.is_at_end() {
             return Err(
                 ParseError::InvalidToken(
@@ -69,9 +74,25 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Private parsing methods for keywords
+/// Private parsing methods for statements
 impl<'a> Parser<'a> {
-    fn parse_statement(&mut self) -> Result<Stmt> {        
+    /// Look at the tokens we have just gotten and see if we have any keywords
+    /// in it, if we found any, call the respective parser to parse that keyword's 
+    /// section.
+    /// 
+    /// Note that it returns after parsing the code/tokens associated with that statement
+    /// like for example in the following code, if our position is 0, it will parse the
+    /// let statement and then return, it won't parse the if statement
+    /// 
+    /// ```
+    /// let x = a + b
+    /// if x > 10 {
+    ///     // do something
+    /// }
+    /// ```
+    fn parse_statement(&mut self) -> Result<Stmt> {   
+        // see what keyword we have here and call the appropriate
+        // parser
         match self.keyword()? {
             Keyword::Let => {
                 self.parse_let_stmt()
@@ -90,9 +111,12 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parse the statement if it starts with let
     fn parse_let_stmt(&mut self) -> Result<Stmt> {  
-        self.advance()?;
-        
+        self.advance()?; // consume the let token
+
+        // We gotta make sure that after let, we have an identifier
+        // like 'let x'
         if self.current()?.kind != TokenKind::Identifier {
             return Err(
                 ParseError::InvalidToken(
@@ -102,10 +126,10 @@ impl<'a> Parser<'a> {
         }
 
         // Consume the identifier we confirmed
-        let ident = self.advance()?.lexeme.to_string();
+        let identifier = self.advance()?.lexeme.to_string();
 
+        // After identifier, we need to have equals token
         if self.current()?.kind != TokenKind::Equals {
-            // println!("Second {:#?}", self.current()?);
             return Err(
                 ParseError::InvalidToken(
                     self.current()?.lexeme.to_string()
@@ -116,27 +140,32 @@ impl<'a> Parser<'a> {
         // We confirmed it's an equals, so consume it
         self.advance()?;
 
-        let expr = self.parse_expression()?;
+        // Let statement contains expression like 'a+b' after = sign,
+        // we parse that expression
+        let expression = self.parse_expression()?;
 
-        // println!("After getting the expr: {:#?}\nCurrent: {:#?}", expr, self.current()?);
-        
         Ok(Stmt::Let {
             keyword: Keyword::Let,
-            identifier: ident,
-            expression: expr
+            identifier,
+            expression,
         })
         
     }
 
+    // Parse the section of the tokens that come under the if statement
     fn parse_if_stmt(&mut self) -> Result<Stmt> {
-        self.advance()?;
+        self.advance()?; // consume the if token
 
+        // We would have an expression after if, so start the expression 
+        // parsing, which will call either binary parsers or conditional
+        // parsers based on what the expression is like
         let condition = self.parse_expression()?;
 
+        // We gotta make sure we have a { after the expression 
         if self.current()?.kind != TokenKind::LBrace {
             return Err(
                 ParseError::TokenExpected(
-                    "{".to_string()
+                    "Expected {".to_string()
                 )
             )
         }
@@ -145,7 +174,9 @@ impl<'a> Parser<'a> {
         self.advance()?;
 
         let mut body = vec![];
-        
+
+        // Keep consuming the tokens until we find a closing brace which will
+        // indicate the end of the if statement
         loop {
             if self.is_at_end() {
                 return Err(
@@ -155,11 +186,13 @@ impl<'a> Parser<'a> {
                 );
             }
 
+            // Got the }, so consume it so we finish the if statement and then break out of the loop
             if self.current()?.kind == TokenKind::RBrace {
                 self.advance()?; // consume the }
                 break;
             }
 
+            // We have neither reached the end of the if statement or end of file, so keep parsing
             body.push(self.parse_statement()?)
         }
 
@@ -172,26 +205,30 @@ impl<'a> Parser<'a> {
         )
     }
 
-
+    /// Parse the section that the while loop should cover 
     fn parse_while_stmt(&mut self) -> Result<Stmt> {
-        self.advance()?;
+        self.advance()?; // consume the while token
 
+        // We should have an expression after while, so parse the condition
         let condition = self.parse_expression()?;
-        
+
+        // We need a { after the condition so make sure we have it
         if self.current()?.kind != TokenKind::LBrace {
-            let lbrace = "{";
             let lexeme = self.current()?.lexeme.to_string();
-            let msg = format!("Expected '{lbrace}' but got '{lexeme}' instead!");
             return Err(
-                ParseError::TokenExpected(msg)
+                ParseError::TokenExpected(
+                    format!("Expected '{{' but got '{lexeme}' instead!")
+                )
             )
         }
 
+        // Confirmed that we have a {, so consume it
         self.advance()?;
         
         let mut body = vec![];
         
         loop {
+            // A closing brace is a must to terminate the while loop
             if self.is_at_end() {
                 return Err(
                     ParseError::TokenExpected(
@@ -200,11 +237,13 @@ impl<'a> Parser<'a> {
                 )
             }
 
+            // Got the right brace, so consume and break out of the loop now
             if self.current()?.kind == TokenKind::RBrace {
                 self.advance()?;
                 break
             }
 
+            // We have neither reached Eof, nor gotten }, so keep going
             body.push(self.parse_statement()?)
         }
 
@@ -222,17 +261,27 @@ impl<'a> Parser<'a> {
 /// Private parsing methods for expressions
 impl<'a> Parser<'a> {
     /// Start the parsing by calling the operation parser with least precedence;
-    /// here, we called addition (which also performs subtraction).
-    /// 
-    /// We grouped addition with subtraction and multiplication with division
-    /// because both have equal precedence and we must perform them from left to right
+    /// here, we called conditional cuz binary operations need to be done before
+    /// conditional operations
     fn parse_expression(&mut self) -> Result<Expr> {
         self.parse_conditional()
     }
 
+    /// Since we need to make sure to parse the binary operations if there are any,
+    /// we call them from inside the conditional parser
+    /// 
+    /// If there are any binary operators, we would get binary tree,
+    /// and if there are no binary operators, we would just get the identifiers or 
+    /// numbers
     fn parse_conditional(&mut self) -> Result<Expr> {
-        let mut left = self.parse_addition()?;
+        // get the expression to put at the left of the conditional operator 
+        let mut left = self.parse_addition()?; 
 
+        // If we haven't reached EOF yet (which is indicated by Ok()), check if 
+        // there are any conditional operators, if there are, get the operator
+        // and move forward, if not, break the loop and just return the binary tree
+        // or identifier or number we had gotten from the first time we called
+        // self.parse_addition()?; 
         while let Ok(current) = self.current() {
             let operator = match current.kind {
                 TokenKind::EqualsEquals => ConditionalOp::IsEqualTo,
@@ -244,7 +293,12 @@ impl<'a> Parser<'a> {
                 _ => break
             };
 
+            // We reaching this line means we have gotten a conditional operator,
+            // so consume it
             self.advance()?;
+
+            // Now parse the right hand side expression (which will give either a
+            // number or identifier or a binary)
             let right = self.parse_addition()?;
 
             left = Expr::Conditional {
