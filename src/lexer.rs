@@ -308,8 +308,19 @@ impl<'a> Lexer<'a> {
                 self.token(TokenKind::Dot, start)
             },
             '!' => {
-                self.advance();
-                self.token(TokenKind::Not, start)
+                if let Some(next) = self.peek() {
+                    if next == '=' {
+                        self.advance();
+                        self.advance();
+                        self.token(TokenKind::ExEquals, start)
+                    } else {
+                        self.advance();
+                        self.token(TokenKind::Not, start)
+                    }
+                } else {
+                    self.advance();
+                    self.token(TokenKind::Not, start)
+                }
             },
             '"' => {
                 self.consume_string();

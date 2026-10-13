@@ -37,6 +37,8 @@ pub enum TokenKind {
     LessThan,
     Not,
     
+    ExEquals, // !=
+    
     GreaterOrEquals,
     LessOrEquals,
 
@@ -84,6 +86,16 @@ pub struct Token<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConditionalOp {
+    IsEqualTo,
+    IsNotEqualThan,
+    IsGreaterThan,
+    IsLessThan,
+    IsGreaterOrEqualTo,
+    IsLessOrEqualTo,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
     Add,
     Subtract,
@@ -95,6 +107,11 @@ pub enum BinaryOp {
 pub enum Expr {
     Integer(i64),
     Identifier(String),
+    Conditional {
+        left: Box<Expr>,
+        operator: ConditionalOp,
+        right: Box<Expr>
+    },
     Binary {
         left: Box<Expr>,
         operator: BinaryOp,

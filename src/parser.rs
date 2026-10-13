@@ -5,7 +5,8 @@ use crate::{
     Keyword,
     Expr,
     Stmt,
-    BinaryOp
+    BinaryOp,
+    ConditionalOp
 };
 
 #[derive(Debug)]
@@ -226,7 +227,33 @@ impl<'a> Parser<'a> {
     /// We grouped addition with subtraction and multiplication with division
     /// because both have equal precedence and we must perform them from left to right
     fn parse_expression(&mut self) -> Result<Expr> {
-        self.parse_addition()
+        self.parse_conditional()
+    }
+
+    fn parse_conditional(&mut self) -> Result<Expr> {
+        let mut left = self.parse_addition()?;
+
+        while let Ok(current) = self.current() {
+            let operator = match current.kind {
+                TokenKind::EqualsEquals => ConditionalOp::IsEqualTo,
+                TokenKind::GreaterThan => ConditionalOp::IsGreaterThan,
+                TokenKind::LessThan => ConditionalOp::IsLessThan,
+                TokenKind::GreaterOrEquals => ConditionalOp::IsGreaterOrEqualTo,
+                TokenKind::LessOrEquals => ConditionalOp::IsLessOrEqualTo,
+                TokenKind::ExEquals => ConditionalOp::IsNotEqualThan,
+                _ => break
+            };
+
+            self.advance()?;
+            let right = self.parse_addition()?;
+
+            left = Expr::Conditional {
+                left: Box::new(left),
+                operator,
+                right: Box::new(right)
+            };
+        }
+        Ok(left)
     }
     
     ///
