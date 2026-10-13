@@ -1,3 +1,18 @@
+//! This is the crate for the language I am experimenting with, whose name is not yet
+//! decided but I am going with **clannonic** for now.
+//! 
+//! For now, it's just a test crate but later when it can run/evaluate basic code,
+//! I am planning to integrate it with my other project **Clanix** to make it the
+//! programatic/scripting layer for it allowing users to automate the tasks
+//! in **Clanix** instead of having to do all things manually.
+//! 
+//! You can find the information about **Clanix**; a developer tool at 
+//! [Clanix](https://github.com/Clannon-Labs/Clanix)
+//!
+//! 
+//! Visit [Lexer](./lexer/struct.Lexer.html) to see the lexer documentation
+//! 
+//! Visit [Parser](./parser/struct.Parser.html) to see the parser documentation
 
 use std::{
     env,
@@ -12,6 +27,7 @@ mod lexer;
 use lexer::Lexer;
 use parser::Parser;
 
+/// The token kinds the language recognizes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
     Identifier, 
@@ -60,6 +76,7 @@ pub enum TokenKind {
     Eof,
 }
 
+/// The keywords to create statements
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Keyword {
     Let,
@@ -72,12 +89,15 @@ pub enum Keyword {
     Return,
 }
 
+/// To store the location of the characters in the source code
+/// and later to use it to display debug info
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
 }
 
+/// What a token in this language has
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Token<'a> {
     pub kind: TokenKind, // what our lexer gives
@@ -85,6 +105,7 @@ pub struct Token<'a> {
     pub span: Span // how long is it? it's starting and ending position
 }
 
+/// The operators you can use to compare stuff
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConditionalOp {
     IsEqualTo,
@@ -95,6 +116,7 @@ pub enum ConditionalOp {
     IsLessOrEqualTo,
 }
 
+/// The binary operators for arithmetic operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
     Add,
@@ -103,34 +125,85 @@ pub enum BinaryOp {
     Divide,
 }
 
+/// The types of expressions supported
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     Integer(i64),
     Identifier(String),
     Conditional {
+        /// The reason we use Expr instead of Identifier
+        /// because we might have to compare between
+        /// any 2 expressions as well, like 
+        /// ```
+        /// (a + b) >= (c + d)
+        /// ```
+        /// 
+        /// here, the individual arithmetic operation expressions like
+        /// (a + b) and (c + d) would ultimately be converted into an
+        /// identifier or number but if we had made the left and right hand
+        /// sides as not Expr, users wouldn't be able to write that
         left: Box<Expr>,
         operator: ConditionalOp,
         right: Box<Expr>
     },
     Binary {
+        /// Obviously the reason we used Expr is because
+        /// we need to have an AST which has the operations/
+        /// expressions in their own respective nodes,
+        /// 
+        /// If we had made it 'left: TokenKind' instead of 
+        /// `left: Box<Expr>`, we would be supporting only one 
+        /// arithmetic operation chain.
+        /// 
+        /// For example:
+        /// ```
+        /// // In the case of left/right: TokenKind
+        /// let x = a + b // valid
+        /// let x = a + b - c // invalid
+        /// 
+        /// // In the case of left/right: Box<Expr>
+        /// let x = a + b // valid
+        /// let x = a + b - c //valid
+        /// 
+        /// // And we can make this chain as long as we want,
+        /// // like this is also perfectly valid:
+        /// 
+        /// let x = a + b - c * d / e
+        /// 
+        /// // Note tha the space between the expressions is not necessary,
+        /// // like we can write this as well
+        /// 
+        /// let x = a+b-c*d/e // perfectly valid
+        /// ```
         left: Box<Expr>,
         operator: BinaryOp,
         right: Box<Expr>,
     }
 }
 
+/// The supported statements and their structures
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
+    // I think we dont need a keyword key here because
+    // the enum variant (Let, If) themselves indicate the keyword
+    // 
+    // And for now, the let statement can just have identifier and expression
     Let {
         keyword: Keyword,
         identifier: String,
         expression: Expr
     },
+    // I think the support for else if or elif branches is also
+    // important here and they should have their own body instead
+    // of the if statement havinga single body
     If {
         keyword: Keyword,
         condition: Expr,
         body: Vec<Stmt>,
     },
+    // This can just have condition and body, maybe?
+    // Maybe I can add other stuff in future but according to
+    // my current understanding, I might not need it
     While {
         keyword: Keyword,
         condition: Expr,
@@ -138,6 +211,8 @@ pub enum Stmt {
     }
 }
 
+/// A simple glue for the lexer and parser (and evaluater/code generator later)
+/// which calls and takes return value from one and gives it to other
 fn main() {
     let args: Vec<String> = env::args().collect();
     let mut path = String::new();

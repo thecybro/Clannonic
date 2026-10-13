@@ -152,7 +152,7 @@ impl<'a> Parser<'a> {
         
     }
 
-    // Parse the section of the tokens that come under the if statement
+    /// Parse the section of the tokens that come under the if statement
     fn parse_if_stmt(&mut self) -> Result<Stmt> {
         self.advance()?; // consume the if token
 
