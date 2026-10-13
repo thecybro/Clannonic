@@ -55,6 +55,14 @@ impl<'a> Parser<'a> {
 
             ast.push(self.parse_statement()?)
         }
+
+        if !self.is_at_end() {
+            return Err(
+                ParseError::InvalidToken(
+                    self.current()?.lexeme.to_string()
+                )
+            )
+        }
             
         Ok(ast)
     }
@@ -70,9 +78,9 @@ impl<'a> Parser<'a> {
             Keyword::If => {
                 self.parse_if_stmt()
             },
-            // Keyword::While => {
-            //     self.parse_white_stmt()
-            // },
+            Keyword::While => {
+                self.parse_while_stmt()
+            },
             _ => return Err(
                 ParseError::NotAKeyword(
                     self.current()?.lexeme.to_string()
@@ -157,35 +165,57 @@ impl<'a> Parser<'a> {
         Ok(
             Stmt::If {
                 keyword: Keyword::If,
-                condition: condition,
-                body: body
+                condition,
+                body,
             }
         )
     }
 
-//     fn parse_while_stmt(&mut self) -> Result<Stmt> {
-//         self.advance()?;
-// 
-//         let condition = self.parse_expression()?;
-// 
-//         if self.current()?.kind != TokenKind::LBrace {
-//             let lbrace = "{";
-//             let current = self.current()?.lexeme.to_string();
-//             let msg = format!("Expected '{lbrace}' but found {current} instead");
-//             
-//             return Err(
-//                 ParseError::InvalidToken(msg)
-//             )
-//         }
-// 
-//         // Consume the left brace we confirmed we have
-//         self.advance()?;
-// 
-//         while let Ok(current) = self.current() {
-//             if current.kind == TokenKind::RBrce
-//         }
-//     }
 
+    fn parse_while_stmt(&mut self) -> Result<Stmt> {
+        self.advance()?;
+
+        let condition = self.parse_expression()?;
+        
+        if self.current()?.kind != TokenKind::LBrace {
+            let lbrace = "{";
+            let lexeme = self.current()?.lexeme.to_string();
+            let msg = format!("Expected '{lbrace}' but got '{lexeme}' instead!");
+            return Err(
+                ParseError::TokenExpected(msg)
+            )
+        }
+
+        self.advance()?;
+        
+        let mut body = vec![];
+        
+        loop {
+            if self.is_at_end() {
+                return Err(
+                    ParseError::TokenExpected(
+                        "Expected '}' before end of file!".to_string()
+                    )
+                )
+            }
+
+            if self.current()?.kind == TokenKind::RBrace {
+                self.advance()?;
+                break
+            }
+
+            body.push(self.parse_statement()?)
+        }
+
+        Ok(
+            Stmt::While {
+                keyword: Keyword::While,
+                condition,
+                body
+            }
+        )
+
+    }
 }
 
 /// Private parsing methods for expressions
@@ -378,7 +408,7 @@ impl<'a> Parser<'a> {
             .ok_or(ParseError::Eof)
     }
 
-    fn keyword(&self) -> Result<Keyword> {        
+    fn keyword(&self) -> Result<Keyword> {
         match self.current()?.kind {
             TokenKind::Keyword(keyword) => {
                 Ok(keyword)

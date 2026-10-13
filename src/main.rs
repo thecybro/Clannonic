@@ -113,6 +113,11 @@ pub enum Stmt {
         keyword: Keyword,
         condition: Expr,
         body: Vec<Stmt>,
+    },
+    While {
+        keyword: Keyword,
+        condition: Expr,
+        body: Vec<Stmt>,
     }
 }
 
