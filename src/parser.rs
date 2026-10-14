@@ -404,6 +404,13 @@ impl<'a> Parser<'a> {
                     )
                 )
             },
+            TokenKind::String => {
+                Ok(
+                    Expr::String(
+                        self.advance()?.lexeme.to_string()
+                    )
+                )
+            },
             /*
              * This is the start of other expression inclosed in () so we have to consume the (
              * and parse the expression again, which will not touch the closing parenthesis ),

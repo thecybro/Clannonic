@@ -130,6 +130,7 @@ pub enum BinaryOp {
 pub enum Expr {
     Integer(i64),
     Identifier(String),
+    String(String),
     Conditional {
         /// The reason we use Expr instead of Identifier
         /// because we might have to compare between
