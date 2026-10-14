@@ -33,6 +33,7 @@ for it isn't there yet, I will add it soon
 ```
 let x = 1
 let y = 2
+let z = "a_string"
 ```
 
 ### Add 2 numbers
