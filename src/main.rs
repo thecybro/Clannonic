@@ -40,6 +40,8 @@ pub enum TokenKind {
     Star,
     Slash,
 
+    Arrow, // -> Used to indicate function return value
+    
     DSlash, // //
     TSlash, // ///
     MSlash, // Any number of slashes above 3
@@ -79,12 +81,12 @@ pub enum TokenKind {
 /// The keywords to create statements
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Keyword {
-    Let,
+    Let, // Done
     For,
-    While,
+    While, // Done
     
     Fn,
-    If,
+    If, // Done
     Else,
     Return,
 }
@@ -194,11 +196,17 @@ pub enum Stmt {
     // of the if statement having a single body
     If {
         condition: Expr,
-        body: Vec<Stmt>,
+        body: Box<[Stmt]>,
     },
     While {
         condition: Expr,
-        body: Vec<Stmt>,
+        body: Box<[Stmt]>,
+    },
+    /// It can't take any arguments yet or return a value, but the functionality will soon
+    /// be added
+    Fn {
+        name: Expr,
+        body: Box<[Stmt]>
     }
 }
 
@@ -231,13 +239,9 @@ fn main() {
 
     let source = fs::read_to_string(path.trim()).expect(&msg);
 
-    // let mut tokens = vec![];
-    // 
-    let mut tokens = Lexer::new(&source);
-    // for token in lexed {
-    //     // println!("{token:#?}");
-    //     tokens.push(token)
-    // }
-    let parsed = Parser::new(tokens.get_lexed()).parse();
+    let tokens = Lexer::new(&source).get_lexed();
+    // println!("{tokens:#?}");
+
+    let parsed = Parser::new(tokens).parse();
     println!("{parsed:#?}")
 }

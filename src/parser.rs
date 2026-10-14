@@ -24,6 +24,7 @@ pub enum ParseError {
     // UnexpectedToken(String),
     TokenExpected(String),
     NotAKeyword(String),
+    KeywordNotSupported(String),
     // UnsupportedKeyword(String),
     StringToI64,
 }
@@ -109,8 +110,11 @@ impl<'a> Parser<'a> {
             Keyword::While => {
                 self.parse_while_stmt()
             },
+            Keyword::Fn => {
+                self.parse_fn_stmt()
+            },
             _ => return Err(
-                ParseError::NotAKeyword(
+                ParseError::KeywordNotSupported(
                     self.current()?.lexeme.to_string()
                 )
             )
@@ -204,7 +208,7 @@ impl<'a> Parser<'a> {
         Ok(
             Stmt::If {
                 condition,
-                body,
+                body: body.into_boxed_slice(),
             }
         )
     }
@@ -254,10 +258,90 @@ impl<'a> Parser<'a> {
         Ok(
             Stmt::While {
                 condition,
-                body
+                body: body.into_boxed_slice()
             }
         )
 
+    }
+
+    /// Function parser
+    /// 
+    /// Currently, it can't take arguments or return a value,
+    /// but soon I will implement that as well
+    fn parse_fn_stmt(&mut self) -> Result<Stmt> {
+        self.advance()?; // Consume the fn token
+
+        if self.current()?.kind != TokenKind::Identifier {
+            let token = self.current()?.lexeme;
+            return Err(
+                ParseError::TokenExpected(
+                    format!("Expected an identifier, found '{token}'")
+                )
+            )
+        }
+
+        let name = self.parse_expression()?; // This will give us the identifier
+        
+        if self.current()?.kind != TokenKind::LParen {
+            let token = self.current()?.lexeme;
+            return Err(
+                ParseError::TokenExpected(
+                    format!("Expected a '(', found '{token}'!")
+                )
+            )
+        }
+
+        self.advance()?; // consume the left parenthesis (
+
+        if self.current()?.kind != TokenKind::RParen {
+            let token = self.current()?.lexeme;
+            return Err(
+                ParseError::TokenExpected(
+                    format!("Expected a ')', found '{token}'!")
+                )
+            )
+        }
+
+        self.advance()?; // consume the right parenthesis )
+
+        
+        
+        if self.current()?.kind != TokenKind::LBrace {
+            let token = self.current()?.lexeme;
+            return Err(
+                ParseError::TokenExpected(
+                    format!("Expected a '{{', found '{token}'!")
+                )
+            )
+        }
+
+        self.advance()?; // consume the left brace {
+
+        let mut body = vec![];
+
+        loop {
+            if self.is_at_end() {
+                return Err(
+                    ParseError::TokenExpected(
+                        "Expected a '}' before end of the file!".to_string()
+                    )
+                )
+            }
+
+            if self.current()?.kind == TokenKind::RBrace {
+                self.advance()?;
+                break
+            }
+
+            body.push(self.parse_statement()?)
+        }
+
+        Ok(
+            Stmt::Fn {
+                name,
+                body: body.into_boxed_slice()
+            }
+        )
     }
 }
 

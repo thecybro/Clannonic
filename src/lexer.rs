@@ -354,7 +354,12 @@ impl<'a> Lexer<'a> {
         }
         
     }
+}
 
+/// The methods that lets the callers avoid the manual and boring works
+impl<'a> Lexer<'a> {
+    /// Automatically get the LexedOutput instead of having to manually
+    /// loop and store the value in a variable etc
     pub fn get_lexed(&mut self) -> LexedOutput<'a> {
         let mut tokens = vec![];
 
@@ -362,12 +367,9 @@ impl<'a> Lexer<'a> {
             tokens.push(token)
         }
 
-        LexedOutput {
-            tokens: tokens.into_boxed_slice()
-        }
+        LexedOutput { tokens: tokens.into_boxed_slice() }
     }
 }
-
 
 impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
