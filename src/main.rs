@@ -202,10 +202,11 @@ pub enum Stmt {
         condition: Expr,
         body: Box<[Stmt]>,
     },
-    /// It can't take any arguments yet or return a value, but the functionality will soon
-    /// be added
+    /// > This doesn't support arguments yet, nor can you actually use the `return` keyword yet,
+    /// > so the return indication is useless
     Fn {
         name: Expr,
+        return_type: Expr,
         body: Box<[Stmt]>
     }
 }

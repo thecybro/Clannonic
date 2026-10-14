@@ -336,8 +336,19 @@ impl<'a> Lexer<'a> {
                 self.token(TokenKind::Plus, start)
             },
             '-' => {
-                self.advance();
-                self.token(TokenKind::Minus, start)
+                if let Some(next) = self.peek() {
+                    if next == '>' {
+                        self.advance();
+                        self.advance();
+                        self.token(TokenKind::Arrow, start)
+                    } else {
+                        self.advance();
+                        self.token(TokenKind::Minus, start)
+                    }
+                } else {
+                    self.advance();
+                    self.token(TokenKind::Minus, start)
+                }
             },
             '*' => {
                 self.advance();

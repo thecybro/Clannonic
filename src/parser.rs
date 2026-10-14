@@ -266,8 +266,8 @@ impl<'a> Parser<'a> {
 
     /// Function parser
     /// 
-    /// Currently, it can't take arguments or return a value,
-    /// but soon I will implement that as well
+    /// > This doesn't support arguments yet, nor can you actually use the `return` keyword yet,
+    /// > so the return indication is useless
     fn parse_fn_stmt(&mut self) -> Result<Stmt> {
         self.advance()?; // Consume the fn token
 
@@ -304,7 +304,18 @@ impl<'a> Parser<'a> {
 
         self.advance()?; // consume the right parenthesis )
 
-        
+        if self.current()?.kind != TokenKind::Arrow {
+            let token = self.current()?.lexeme;
+            return Err(
+                ParseError::TokenExpected(
+                    format!("Expected a '->' after function declaration, found '{token}'!")
+                )
+            )
+        }
+
+        self.advance()?; // consume the arrow
+
+        let return_type = self.parse_expression()?;
         
         if self.current()?.kind != TokenKind::LBrace {
             let token = self.current()?.lexeme;
@@ -339,6 +350,7 @@ impl<'a> Parser<'a> {
         Ok(
             Stmt::Fn {
                 name,
+                return_type,
                 body: body.into_boxed_slice()
             }
         )
