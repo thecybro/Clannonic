@@ -1,12 +1,14 @@
 
 use crate::{
-    TokenKind,
-    Token,
-    Keyword,
-    Expr,
-    Stmt,
     BinaryOp,
-    ConditionalOp
+    ConditionalOp,
+    Expr,
+    Keyword,
+    LexedOutput,
+    Program,
+    Stmt,
+    Token,
+    TokenKind
 };
 
 #[derive(Debug)]
@@ -34,9 +36,9 @@ impl<'a> Parser<'a> {
     /// tokens to later parse those tokens
     /// 
     /// Initialize the parser
-    pub fn new(tokens: Vec<Token<'a>>) -> Self {
+    pub fn new(output: LexedOutput<'a>) -> Self {
         Self {
-            tokens,
+            tokens: output.tokens.to_vec(),
             position: 0
         }
     }
@@ -45,7 +47,7 @@ impl<'a> Parser<'a> {
     /// leads to a recursive calling between itself, add operations parser,
     /// multiplication parser and primary parser which calls the add/multiplication
     /// parser or simply returns a number or identifier/variable by pattern matching
-    pub fn parse(&mut self) -> Result<Vec<Stmt>> {
+    pub fn parse(&mut self) -> Result<Program> {
         let mut ast = vec![];
 
         // Loop over the tokens and parse the statements until we reach
@@ -70,7 +72,11 @@ impl<'a> Parser<'a> {
             )
         }
             
-        Ok(ast)
+        Ok(
+            Program{
+                ast: ast.into_boxed_slice()
+            }
+        )
     }
 }
 

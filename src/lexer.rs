@@ -3,6 +3,7 @@ use crate::{
   Token,
   TokenKind,
   Keyword,
+  LexedOutput,
   Span,
 };
 
@@ -353,7 +354,18 @@ impl<'a> Lexer<'a> {
         }
         
     }
-    
+
+    pub fn get_lexed(&mut self) -> LexedOutput<'a> {
+        let mut tokens = vec![];
+
+        for token in self {
+            tokens.push(token)
+        }
+
+        LexedOutput {
+            tokens: tokens.into_boxed_slice()
+        }
+    }
 }
 
 

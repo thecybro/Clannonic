@@ -202,6 +202,18 @@ pub enum Stmt {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct LexedOutput<'a> {
+    pub tokens: Box<[Token<'a>]>
+}
+
+#[derive(Debug, Clone)]
+pub struct Program {
+    // This will allow us to return other stuff as part of the program
+    // which are not the part of the ast itself
+    pub ast: Box<[Stmt]>
+}
+
 /// A simple glue for the lexer and parser (and evaluater/code generator later)
 /// which calls and takes return value from one and gives it to other
 fn main() {
@@ -219,13 +231,13 @@ fn main() {
 
     let source = fs::read_to_string(path.trim()).expect(&msg);
 
-    let mut tokens = vec![];
-    
-    let lexed = Lexer::new(&source);
-    for token in lexed {
-        // println!("{token:#?}");
-        tokens.push(token)
-    }
-    let parsed = Parser::new(tokens).parse();
+    // let mut tokens = vec![];
+    // 
+    let mut tokens = Lexer::new(&source);
+    // for token in lexed {
+    //     // println!("{token:#?}");
+    //     tokens.push(token)
+    // }
+    let parsed = Parser::new(tokens.get_lexed()).parse();
     println!("{parsed:#?}")
 }
