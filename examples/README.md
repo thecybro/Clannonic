@@ -64,3 +64,12 @@ while x > 2 {
   let x = x -1
 }
 ```
+
+### Creating a function
+> This doesn't support arguments yet, nor can you actually use the `return` keyword yet,
+> so the return indication is useless
+```
+fn main() -> String {
+  let x = "smt"
+}
+```
