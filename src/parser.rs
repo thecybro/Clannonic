@@ -145,7 +145,6 @@ impl<'a> Parser<'a> {
         let expression = self.parse_expression()?;
 
         Ok(Stmt::Let {
-            keyword: Keyword::Let,
             identifier,
             expression,
         })
@@ -198,7 +197,6 @@ impl<'a> Parser<'a> {
 
         Ok(
             Stmt::If {
-                keyword: Keyword::If,
                 condition,
                 body,
             }
@@ -249,7 +247,6 @@ impl<'a> Parser<'a> {
 
         Ok(
             Stmt::While {
-                keyword: Keyword::While,
                 condition,
                 body
             }

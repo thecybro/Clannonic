@@ -185,28 +185,18 @@ pub enum Expr {
 /// The supported statements and their structures
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
-    // I think we dont need a keyword key here because
-    // the enum variant (Let, If) themselves indicate the keyword
-    // 
-    // And for now, the let statement can just have identifier and expression
     Let {
-        keyword: Keyword,
         identifier: String,
         expression: Expr
     },
     // I think the support for else if or elif branches is also
     // important here and they should have their own body instead
-    // of the if statement havinga single body
+    // of the if statement having a single body
     If {
-        keyword: Keyword,
         condition: Expr,
         body: Vec<Stmt>,
     },
-    // This can just have condition and body, maybe?
-    // Maybe I can add other stuff in future but according to
-    // my current understanding, I might not need it
     While {
-        keyword: Keyword,
         condition: Expr,
         body: Vec<Stmt>,
     }
