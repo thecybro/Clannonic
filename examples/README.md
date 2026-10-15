@@ -68,6 +68,10 @@ while x > 2 {
 ### Creating a function
 > This doesn't support arguments yet, nor can you actually use the `return` keyword yet,
 > so the return indication is useless
+>
+> [!NOTE]
+> Here, the type indication (-> type) of the return type is compulsary, so you can't
+> just do `fn main() {..}`
 ```
 fn main() -> String {
   let x = "smt"
