@@ -8,7 +8,8 @@ use crate::{
     Program,
     Stmt,
     Token,
-    TokenKind
+    TokenKind,
+    DataType,
 };
 
 #[derive(Debug)]
@@ -21,6 +22,7 @@ pub struct Parser<'a> {
 pub enum ParseError {
     Eof,
     InvalidToken(String),
+    InvalidDataType(String),
     // UnexpectedToken(String),
     TokenExpected(String),
     NotAKeyword(String),
@@ -315,7 +317,7 @@ impl<'a> Parser<'a> {
 
         self.advance()?; // consume the arrow
 
-        let return_type = self.parse_expression()?;
+        let return_type = self.parse_data_type()?;
         
         if self.current()?.kind != TokenKind::LBrace {
             let token = self.current()?.lexeme;
@@ -487,25 +489,32 @@ impl<'a> Parser<'a> {
         // println!("Current: {:#?}", token);
             
         match token.kind {
-            TokenKind::Integer => {
-                if let Some(integer) = parse_to_i64(token.lexeme) {
-                    self.advance()?;
-                    Ok(Expr::Integer(integer))
-                } else {
-                    Err(ParseError::StringToI64)
-                }
+            TokenKind::DataType(data_type) => match data_type {
+                DataType::Integer => {
+                    if let Some(integer) = parse_to_i64(token.lexeme) {
+                        self.advance()?;
+                        Ok(Expr::Integer(integer))
+                    } else {
+                        Err(ParseError::StringToI64)
+                    }
+                },
+                DataType::String => {
+                    Ok(
+                        Expr::String(
+                            self.advance()?.lexeme.to_string()
+                        )
+                    ) 
+                },
+                _ => return Err(
+                    ParseError::InvalidDataType(
+                        self.current()?.lexeme.to_string()
+                    )
+                )
             },
             TokenKind::Identifier => {
                 // println!("returned the identifier");
                 Ok(
                     Expr::Identifier(
-                        self.advance()?.lexeme.to_string()
-                    )
-                )
-            },
-            TokenKind::String => {
-                Ok(
-                    Expr::String(
                         self.advance()?.lexeme.to_string()
                     )
                 )
@@ -538,7 +547,6 @@ impl<'a> Parser<'a> {
                         return Ok(expr)
                     },
                     _ => {
-                        println!("{:#?}", current);
                         return Err(
                             ParseError::TokenExpected(
                             ")".to_string()
@@ -547,12 +555,37 @@ impl<'a> Parser<'a> {
                 }
             },
             _ => {
-                println!("From primary");
                 Err(
                     ParseError::InvalidToken(
                     token.lexeme.to_string()
                 ))
             }
+        }
+    }
+}
+
+/// Private parsing methods for data types
+impl<'a> Parser<'a> {
+    fn parse_data_type(&mut self) -> Result<DataType> {        
+        if let Ok(current) = self.current() {
+            let cur = current.lexeme.to_string();
+            match current.kind {
+                TokenKind::DataType(_type) => {
+                    self.advance()?;
+                    Ok(_type)
+                },
+                _ => return Err(
+                    ParseError::InvalidDataType (
+                        format!("'{cur}' is not a data type!")
+                    )
+                )
+            }
+        } else {
+            return Err(
+                ParseError::TokenExpected(
+                    "Expected a data type before end of file!".to_string()
+                )
+            )
         }
     }
 }

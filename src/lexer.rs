@@ -2,6 +2,7 @@
 use crate::{
   Token,
   TokenKind,
+  DataType,
   Keyword,
   LexedOutput,
   Span,
@@ -136,6 +137,10 @@ impl<'a> Lexer<'a> {
             "if" => TokenKind::Keyword(Keyword::If),
             "else" => TokenKind::Keyword(Keyword::Else),
             "return" => TokenKind::Keyword(Keyword::Return),
+
+            "String" => TokenKind::DataType(DataType::String),
+            "int" => TokenKind::DataType(DataType::Integer),
+            "float" => TokenKind::DataType(DataType::Float),
             _ => TokenKind::Identifier
         }
     }
@@ -219,7 +224,7 @@ impl<'a> Lexer<'a> {
             },
             '0'..='9' => {
                 self.consume_integer();
-                self.token(TokenKind::Integer, start)
+                self.token(TokenKind::DataType(DataType::Integer), start)
             },
             '=' => {
                 if let Some(next) = self.peek() {
@@ -325,7 +330,7 @@ impl<'a> Lexer<'a> {
             },
             '"' => {
                 self.consume_string();
-                self.token(TokenKind::String, start)
+                self.token(TokenKind::DataType(DataType::String), start)
             },
             '\'' => {
                 self.consume_string();

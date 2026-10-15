@@ -31,9 +31,8 @@ use parser::Parser;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenKind {
     Identifier, 
-    Integer,
-    Float,
-    String,
+
+    DataType(DataType),
     
     Plus,
     Minus,
@@ -76,6 +75,24 @@ pub enum TokenKind {
     Keyword(Keyword),
     
     Eof,
+}
+
+/// The data types this language currently supports
+/// Usage example: 
+/// ```
+/// fn main() -> int {
+///     // do something here
+/// }
+/// ```
+/// 
+/// Here the return type is 'int' and
+/// the function must indicate the type it is going to return
+/// 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataType {
+    Integer, // int
+    Float, // float
+    String, // String
 }
 
 /// The keywords to create statements
@@ -206,7 +223,7 @@ pub enum Stmt {
     /// > so the return indication is useless
     Fn {
         name: Expr,
-        return_type: Expr,
+        return_type: DataType,
         body: Box<[Stmt]>
     }
 }
