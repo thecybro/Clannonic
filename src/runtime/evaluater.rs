@@ -43,48 +43,116 @@ impl Evaluater {
                 self.environment.get(name).cloned()
             },
             Expr::Binary { left, operator, right } => {
-                let left = self.eval_expression(left)?;
-                let right = self.eval_expression(right)?;
-
-                match (left, right) {
-                    (Value::Number(left), Value::Number(right)) => {
-                        let result = match operator {
-                            BinaryOp::Add => left + right,
-                            BinaryOp::Subtract => left - right,
-                            BinaryOp::Multiply => left * right,
-                            BinaryOp::Divide => {
-                                if right == 0.0 {
-                                    return Err(
-                                        EvalError::InvalidBinaryOperation {
-                                            left: Value::Number(left),
-                                            operator: *operator,
-                                            right: Value::Number(right)
-                                        }
-                                    )
-                                }
-
-                                left / right
-                            },
-                        };
-
-                        Ok(Value::Number(result))
-                    }
-                    (left, right) => Err(EvalError::InvalidBinaryOperation {
-                        left,
-                        operator: *operator,
-                        right,
-                    }),
-                }
+                self.eval_binary_expression(left, operator, right)
             }
             Expr::Conditional {..} => {
                 todo!("Conditional expressions are next!")
             },
         }
     }
+
+    fn eval_binary_expression(
+        &self,
+        left: &Expr,
+        operator: &BinaryOp,
+        right: &Expr 
+    ) -> Result<Value> {
+
+        let left = self.eval_expression(left)?;
+        let right = self.eval_expression(right)?;
+
+        match (left, right) {
+            (Value::Number(left), Value::Number(right)) => {
+                match operator {
+                    BinaryOp::Add => Ok(Value::Number(left + right)),
+                    BinaryOp::Subtract => Ok(Value::Number(left - right)),
+                    BinaryOp::Multiply => Ok(Value::Number(left * right)),
+                    BinaryOp::Divide => {
+                        if right == 0.0 {
+                            return Err(
+                                EvalError::InvalidBinaryOperation {
+                                    left: Value::Number(left),
+                                    operator: BinaryOp::Divide,
+                                    right: Value::Number(right)
+                                }
+                            )
+                        }
+
+                        Ok(Value::Number(left / right))
+                    },
+                }
+            },
+            (left, right) => {
+                Err(
+                    EvalError::InvalidBinaryOperation {
+                        left,
+                        operator: *operator,
+                        right
+                    }
+                )
+            }
+        }
+    }
 }
 
 #[test]
-fn ok_evaluate_normal_binary_addition() {
+fn ok_evaluate_binary_expression_with_identifier() {
+    // Create a manual environment so we can manually
+    // define/insert values into the variable for testing
+    let mut environment = Environment::new();
+
+    // Define the variable "x" with 5.0
+    let _ = environment.define("x".to_string(), Value::Number(5.0));
+    
+    let evaluater = Evaluater {
+        environment
+    };
+
+    let expression = Expr::Binary {
+        left: Box::new(Expr::Identifier("x".to_string())),
+        operator: BinaryOp::Add,
+        right: Box::new(Expr::Integer(10.0))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression),
+        Ok(Value::Number(15.0))
+    );
+}
+
+#[test]
+fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
+    // Create a manual environment so we can manually
+    // define/insert values into the variable for testing
+    let mut environment = Environment::new();
+
+    // Define the variable "x" with "a_string"
+    let _ = environment.define("x".to_string(), Value::String("a_string".to_string()));
+    
+    let evaluater = Evaluater {
+        environment
+    };
+
+    let expression = Expr::Binary {
+        left: Box::new(Expr::Identifier("x".to_string())),
+        operator: BinaryOp::Add,
+        right: Box::new(Expr::Integer(10.0))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression),
+        Err(
+            EvalError::InvalidBinaryOperation {
+                left: Value::String("a_string".to_string()),
+                operator: BinaryOp::Add,
+                right: Value::Number(10.0)
+            }
+        )
+    );
+}
+
+#[test]
+fn ok_evaluate_normal_binary_expression() {
     let evaluater = Evaluater::new();
 
     // 10.0 + 20.0 = 30.0
@@ -229,7 +297,7 @@ fn err_evaluate_binary_expression_with_string() {
 }
 
 #[test]
-fn ok_evaluate_normal_nested_binary_addition() {
+fn ok_evaluate_normal_nested_binary_expression() {
     let evaluater = Evaluater::new();
 
     let expression = Expr::Binary {
