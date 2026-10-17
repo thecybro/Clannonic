@@ -1,5 +1,5 @@
 
-use crate::{
+use super::{
     BinaryOp,
     ConditionalOp,
     Expr,
@@ -282,7 +282,28 @@ impl<'a> Parser<'a> {
             )
         }
 
-        let name = self.parse_expression()?; // This will give us the identifier
+        // let name = self.parse_expression()?; // This will give us the identifier
+        let name = if let Ok(current) = self.current() {
+            let curr = current.lexeme.to_string();
+            
+            if current.kind != TokenKind::Identifier {
+                return Err(
+                    ParseError::TokenExpected(
+                        format!("Expected an identifier but found '{curr}' instead!")
+                    )
+                )
+            }
+
+            self.advance()?;
+
+            curr
+        } else {
+            return Err(
+                ParseError::TokenExpected(
+                    format!("Expected an identifier before end of file!")
+                )
+            )
+        };
         
         if self.current()?.kind != TokenKind::LParen {
             let token = self.current()?.lexeme;
@@ -491,7 +512,7 @@ impl<'a> Parser<'a> {
         match token.kind {
             TokenKind::DataType(data_type) => match data_type {
                 DataType::Integer => {
-                    if let Some(integer) = parse_to_i64(token.lexeme) {
+                    if let Some(integer) = parse_to_f64(token.lexeme) {
                         self.advance()?;
                         Ok(Expr::Integer(integer))
                     } else {
@@ -649,9 +670,9 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// An external helper for parsing strings to i64
-fn parse_to_i64(input: &str) -> Option<i64> {
-    if let Ok(integer) = input.parse::<i64>() {
+/// An external helper for parsing strings to f64
+fn parse_to_f64(input: &str) -> Option<f64> {
+    if let Ok(integer) = input.parse::<f64>() {
         Some(integer)
     } else {
         None
