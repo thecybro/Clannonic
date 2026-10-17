@@ -52,7 +52,7 @@ impl Environment {
 }
 
 #[test]
-fn environment() {
+fn ok_and_err_environment_define_and_get() {
     let mut environment = Environment::new();
 
     assert_eq!(

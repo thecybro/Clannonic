@@ -1,3 +1,4 @@
+use crate::frontend::BinaryOp;
 
 
 pub(super) type Result<T> = std::result::Result<T, EvalError>;
@@ -12,5 +13,10 @@ pub enum Value {
 pub enum EvalError {
     UndefinedVariable(String),
     DuplicateVariable(String),
+    InvalidBinaryOperation {
+        left: Value,
+        operator: BinaryOp,
+        right: Value
+    }
 }
 
