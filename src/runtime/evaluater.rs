@@ -149,6 +149,19 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
             }
         )
     );
+
+    let expression2 = Expr::Binary {
+        left: Box::new(Expr::Identifier("y".to_string())),
+        operator: BinaryOp::Add,
+        right: Box::new(Expr::Integer(10.0))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression2),
+        Err(
+            EvalError::UndefinedVariable("y".to_string())
+        )
+    );
 }
 
 #[test]
