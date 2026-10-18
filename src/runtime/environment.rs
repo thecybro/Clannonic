@@ -29,13 +29,20 @@ impl Environment {
         value: Value
     ) -> Result<Value> {
 
-        if self.values.contains_key(&name) {
-            return Err(
-                EvalError::DuplicateVariable(
-                    name
-                )
-            )
-        }
+        /*
+         * I think we should let the user over write the
+         * variable??
+         * 
+         * Maybe there's another solution but since we need
+         * to update the value, I am commenting it
+         */
+        // if self.values.contains_key(&name) {
+        //     return Err(
+        //         EvalError::DuplicateVariable(
+        //             name
+        //         )
+        //     )
+        // }
 
         self.values.insert(name.clone(), value.clone());
 

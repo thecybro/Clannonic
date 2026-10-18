@@ -51,7 +51,7 @@ impl Evaluater {
                 self.eval_if_statement(condition, body)
             },
             Stmt::While { condition, body } => {
-                todo!("While statement evaluater will be implemented soon")
+                self.eval_while_statement(condition, body)
             },
             Stmt::Fn { name, return_type, body } => {
                 todo!("Fn statement evaluater will be implemented in the upcoming commits")
@@ -94,6 +94,21 @@ impl Evaluater {
         Ok(())
 
         
+    }
+
+    fn eval_while_statement(
+        &mut self,
+        condition: &Expr,
+        body: &Box<[Stmt]>
+    ) -> Result<()> {
+
+        while self.eval_expression(condition)? == Value::Boolean(true) {
+            for stmt in body.to_vec() {
+                self.eval_statement(&stmt)?
+            }
+        }
+
+        Ok(())
     }
     
     fn eval_expression(
