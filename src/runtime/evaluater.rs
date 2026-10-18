@@ -31,7 +31,53 @@ impl Evaluater {
 //         
 //     }
 
-    pub fn eval_expression(
+    fn eval_statement(
+        &mut self,
+        stmt: &Stmt
+    ) -> Result<Value> {
+        
+        match stmt {
+            Stmt::Let { identifier, expression } => {
+                // We didn't pass the identifier to the let statement
+                // evaluater because it doesn't need it to do anything.
+                // 
+                // We can simply take the value it returns successfully
+                // and store it in the identifier we have
+                // 
+                // This way, we can keep the environment control in a single
+                // place
+                let value = self.eval_let_statement(expression)?;
+
+                self.environment.define(identifier.clone(), value)
+            },
+            Stmt::If { condition, body } => {
+                todo!("If statement evaluater will be implemented next")
+            },
+            Stmt::While { condition, body } => {
+                todo!("While statement evaluater will be implemented soon")
+            },
+            Stmt::Fn { name, return_type, body } => {
+                todo!("Fn statement evaluater will be implemented in the upcoming commits")
+            }
+        }
+    }
+
+    fn eval_let_statement(
+        &self,
+        expression: &Expr
+    ) -> Result<Value> {
+
+        match expression {
+            Expr::Integer(num) => Ok(Value::Number(*num)),
+            Expr::Identifier(ident) => {
+                Ok(self.environment.get(ident)?.clone())
+            },
+            Expr::String(a_string) => Ok(Value::String(a_string.clone())),
+            _ => self.eval_expression(expression)
+        }
+    }
+    
+    fn eval_expression(
         &self,
         expression: &Expr
     ) -> Result<Value> {
@@ -715,5 +761,72 @@ fn err_evaluate_conditional_expression() {
                 right: Value::String("x".to_string())
             }
         )
+    );
+}
+
+#[test]
+fn ok_evaluate_let_statement_to_define_and_access_value_and_test_with_binary_expr_and_conditional() {
+    let mut evaluater = Evaluater::new();
+
+    // let x = 10.0 + (10.0 + 10.0): x = 30
+    let define_stmt = Stmt::Let {
+        identifier: "x".to_string(),
+        expression: Expr::Binary {
+            left: Box::new(Expr::Integer(10.0)),
+            operator: BinaryOp::Add,
+            right: Box::new(Expr::Binary {
+                left: Box::new(Expr::Integer(10.0)),
+                operator: BinaryOp::Add,
+                right: Box::new(Expr::Integer(10.0))
+            })
+        }
+    };
+
+    assert_eq!(
+        evaluater.eval_statement(&define_stmt),
+        Ok(Value::Number(30.0))
+    );
+
+    // let y = 10.0 + (x + 10.0): y = 50
+    let access_stmt = Stmt::Let {
+        identifier: "y".to_string(),
+        expression: Expr::Binary {
+            left: Box::new(Expr::Integer(10.0)),
+            operator: BinaryOp::Add,
+            right: Box::new(Expr::Binary {
+                left: Box::new(Expr::Identifier("x".to_string())),
+                operator: BinaryOp::Add,
+                right: Box::new(Expr::Integer(10.0))
+            })
+        }
+    };
+
+    assert_eq!(
+        evaluater.eval_statement(&access_stmt),
+        Ok(Value::Number(50.0))
+    );
+
+    // x(30) + y(50): 80.0
+    let expression1 = Expr::Binary {
+        left: Box::new(Expr::Identifier("x".to_string())),
+        operator: BinaryOp::Add,
+        right: Box::new(Expr::Identifier("y".to_string()))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression1),
+        Ok(Value::Number(80.0))
+    );
+
+    // x(30) < y(50): true
+    let expression2 = Expr::Conditional {
+        left: Box::new(Expr::Identifier("x".to_string())),
+        operator: ConditionalOp::IsLessThan,
+        right: Box::new(Expr::Identifier("y".to_string()))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression2),
+        Ok(Value::Boolean(true))
     );
 }

@@ -27,7 +27,7 @@ impl Environment {
         &mut self,
         name: String,
         value: Value
-    ) -> Result<()> {
+    ) -> Result<Value> {
 
         if self.values.contains_key(&name) {
             return Err(
@@ -38,7 +38,7 @@ impl Environment {
         }
 
         self.values.insert(name, value.clone());
-        Ok(())
+        Ok(value)
     }
 
     pub fn get(&self, name: &str) -> Result<&Value> {
@@ -60,7 +60,7 @@ fn ok_and_err_environment_define_and_get() {
             "x".to_owned(),
             Value::Number(10.0),
         ),
-        Ok(()),
+        Ok(Value::Number(10.0)),
     );
 
     assert_eq!(
@@ -68,7 +68,7 @@ fn ok_and_err_environment_define_and_get() {
             "y".to_owned(),
             Value::String("something".to_string())
         ),
-        Ok(())
+        Ok(Value::String("something".to_string()))
     );
         
     assert_eq!(
