@@ -48,7 +48,7 @@ impl Evaluater {
                 Ok(())
             },
             Stmt::If { condition, body } => {
-                todo!("If statement evaluater will be implemented next")
+                self.eval_if_statement(condition, body)
             },
             Stmt::While { condition, body } => {
                 todo!("While statement evaluater will be implemented soon")
@@ -75,6 +75,25 @@ impl Evaluater {
         };
 
         self.environment.define(identifier.to_string(), value)
+    }
+
+    fn eval_if_statement(
+        &mut self,
+        condition: &Expr,
+        body: &Box<[Stmt]>
+    ) -> Result<()> {
+
+        let condition_result = self.eval_expression(condition)?;
+
+        if condition_result == Value::Boolean(true) {
+            for stmt in body.to_vec() {
+                self.eval_statement(&stmt)?
+            }
+        }
+
+        Ok(())
+
+        
     }
     
     fn eval_expression(

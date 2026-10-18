@@ -39,7 +39,7 @@ impl Environment {
 
         self.values.insert(name.clone(), value.clone());
 
-        println!("Stored '{value:#?}' in '{name:#?}'");
+        println!("\nStored '{value:#?}' in '{name:#?}'\n");
         
         Ok(value)
     }
