@@ -37,7 +37,10 @@ impl Environment {
             )
         }
 
-        self.values.insert(name, value.clone());
+        self.values.insert(name.clone(), value.clone());
+
+        println!("Stored '{value:#?}' in '{name:#?}'");
+        
         Ok(value)
     }
 

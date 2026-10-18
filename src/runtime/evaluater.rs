@@ -1,6 +1,6 @@
 
 use crate::frontend::{
-    BinaryOp, ConditionalOp, Expr, Stmt,
+    BinaryOp, ConditionalOp, Expr, Program, Stmt,
 };
 
 use super::{
@@ -23,13 +23,19 @@ impl Evaluater {
         }
     }
     
-//     pub fn evaluate(
-//         &mut self,
-//         statements: &[Stmt],
-//     ) -> Result<()> {
-// 
-//         
-//     }
+    pub fn evaluate(
+        &mut self,
+        program: &Program,
+    ) -> Result<()> {
+
+        let statements: Vec<Stmt> = program.ast.to_vec();
+        
+        for stmt in statements {
+            let _ = self.eval_statement(&stmt)?;
+        }
+
+        Ok(())
+    }
 
     fn eval_statement(
         &mut self,

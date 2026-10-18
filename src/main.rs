@@ -63,7 +63,9 @@ fn main() -> Result<(), Error> {
     let parsed = Parser::new(tokens).parse()?;
     // println!("{parsed:#?}");
     
-    // let _ = Evaluater::new(parsed).evaluate()?;
+    let result = Evaluater::new().evaluate(&parsed);
+
+    println!("{result:#?}");
     
     Ok(())
 }
