@@ -338,7 +338,14 @@ impl<'a> Parser<'a> {
 
         self.advance()?; // consume the arrow
 
-        let return_type = self.parse_data_type()?;
+        let return_type = self.parse_data_type();
+
+        // If we didn't get None then it means there is 
+        // a return type, so consume it, if not, we dont 
+        // try to do so
+        if return_type != None {
+            self.advance()?;
+        }
         
         if self.current()?.kind != TokenKind::LBrace {
             let token = self.current()?.lexeme;
@@ -587,26 +594,20 @@ impl<'a> Parser<'a> {
 
 /// Private parsing methods for data types
 impl<'a> Parser<'a> {
-    fn parse_data_type(&mut self) -> Result<DataType> {        
+    /// If this returns a Some(), we know that there is 
+    /// a data type to be returned,
+    /// if we got a None, we know that it doesn't return
+    /// anything
+    fn parse_data_type(&mut self) -> Option<DataType> {        
         if let Ok(current) = self.current() {
-            let cur = current.lexeme.to_string();
             match current.kind {
                 TokenKind::DataType(_type) => {
-                    self.advance()?;
-                    Ok(_type)
+                    Some(_type)
                 },
-                _ => return Err(
-                    ParseError::InvalidDataType (
-                        format!("'{cur}' is not a data type!")
-                    )
-                )
+                _ => None
             }
         } else {
-            return Err(
-                ParseError::TokenExpected(
-                    "Expected a data type before end of file!".to_string()
-                )
-            )
+            None
         }
     }
 }

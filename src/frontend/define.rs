@@ -205,7 +205,7 @@ pub enum Stmt {
     /// > so the return indication is useless
     Fn {
         name: String,
-        return_type: DataType,
+        return_type: Option<DataType>,
         body: Box<[Stmt]>
     }
 }
