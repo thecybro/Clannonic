@@ -34,21 +34,12 @@ impl Evaluater {
     fn eval_statement(
         &mut self,
         stmt: &Stmt
-    ) -> Result<Value> {
+    ) -> Result<()> {
         
         match stmt {
             Stmt::Let { identifier, expression } => {
-                // We didn't pass the identifier to the let statement
-                // evaluater because it doesn't need it to do anything.
-                // 
-                // We can simply take the value it returns successfully
-                // and store it in the identifier we have
-                // 
-                // This way, we can keep the environment control in a single
-                // place
-                let value = self.eval_let_statement(expression)?;
-
-                self.environment.define(identifier.clone(), value)
+                let _ = self.eval_let_statement(identifier, expression)?;
+                Ok(())
             },
             Stmt::If { condition, body } => {
                 todo!("If statement evaluater will be implemented next")
@@ -63,18 +54,21 @@ impl Evaluater {
     }
 
     fn eval_let_statement(
-        &self,
+        &mut self,
+        identifier: &str,
         expression: &Expr
     ) -> Result<Value> {
 
-        match expression {
-            Expr::Integer(num) => Ok(Value::Number(*num)),
+        let value = match expression {
+            Expr::Integer(num) => Value::Number(*num),
             Expr::Identifier(ident) => {
-                Ok(self.environment.get(ident)?.clone())
+                self.environment.get(ident)?.clone()
             },
-            Expr::String(a_string) => Ok(Value::String(a_string.clone())),
-            _ => self.eval_expression(expression)
-        }
+            Expr::String(a_string) => Value::String(a_string.clone()),
+            _ => self.eval_expression(expression)?
+        };
+
+        self.environment.define(identifier.to_string(), value)
     }
     
     fn eval_expression(
@@ -784,7 +778,7 @@ fn ok_evaluate_let_statement_to_define_and_access_value_and_test_with_binary_exp
 
     assert_eq!(
         evaluater.eval_statement(&define_stmt),
-        Ok(Value::Number(30.0))
+        Ok(())
     );
 
     // let y = 10.0 + (x + 10.0): y = 50
@@ -803,7 +797,7 @@ fn ok_evaluate_let_statement_to_define_and_access_value_and_test_with_binary_exp
 
     assert_eq!(
         evaluater.eval_statement(&access_stmt),
-        Ok(Value::Number(50.0))
+        Ok(())
     );
 
     // x(30) + y(50): 80.0
