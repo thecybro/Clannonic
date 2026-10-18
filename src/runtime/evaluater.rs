@@ -1,6 +1,6 @@
 
 use crate::frontend::{
-    BinaryOp, Expr, Stmt,
+    BinaryOp, ConditionalOp, Expr, Stmt,
 };
 
 use super::{
@@ -45,8 +45,8 @@ impl Evaluater {
             Expr::Binary { left, operator, right } => {
                 self.eval_binary_expression(left, operator, right)
             }
-            Expr::Conditional {..} => {
-                todo!("Conditional expressions are next!")
+            Expr::Conditional { left, operator, right } => {
+                self.eval_conditional_expression(left, operator, right)
             },
         }
     }
@@ -85,6 +85,51 @@ impl Evaluater {
             (left, right) => {
                 Err(
                     EvalError::InvalidBinaryOperation {
+                        left,
+                        operator: *operator,
+                        right
+                    }
+                )
+            }
+        }
+    }
+
+    fn eval_conditional_expression(
+        &self,
+        left: &Expr,
+        operator: &ConditionalOp,
+        right: &Expr
+    ) -> Result<Value> {
+
+        let left = self.eval_expression(left)?;
+        let right = self.eval_expression(right)?;
+
+        match (left, right) {
+            (Value::Number(left), Value::Number(right)) => {
+                match operator {
+                    ConditionalOp::IsEqualTo => {
+                        Ok(Value::Boolean(left == right))
+                    },
+                    ConditionalOp::IsNotEqualTo => {
+                        Ok(Value::Boolean(left != right))
+                    },
+                    ConditionalOp::IsGreaterThan => {
+                        Ok(Value::Boolean(left > right))
+                    },
+                    ConditionalOp::IsLessThan => {
+                        Ok(Value::Boolean(left < right))
+                    },
+                    ConditionalOp::IsGreaterOrEqualTo => {
+                        Ok(Value::Boolean(left >= right ))
+                    },
+                    ConditionalOp::IsLessOrEqualTo => {
+                        Ok(Value::Boolean(left <= right))
+                    }
+                }
+            },
+            (left, right) => {
+                return Err(
+                    EvalError::InvalidConditionalOperation {
                         left,
                         operator: *operator,
                         right
@@ -353,3 +398,322 @@ fn err_evaluate_invalid_binary_expression() {
     )
 }
 
+#[test]
+fn ok_evaluate_conditional_expression() {
+    let evaluater = Evaluater::new();
+
+    // 10.0 == 10.0: true
+    let expression1 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsEqualTo,
+        right: Box::new(Expr::Integer(10.0))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression1),
+        Ok(Value::Boolean(true))
+    );
+
+    // 10.0 > 10.0: false
+    let expression2 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsGreaterThan,
+        right: Box::new(Expr::Integer(10.0))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression2),
+        Ok(Value::Boolean(false))
+    );
+
+    // 10.0 < 10.0: false
+    let expression3 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsLessThan,
+        right: Box::new(Expr::Integer(10.0))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression3),
+        Ok(Value::Boolean(false))
+    );
+
+    // 10.0 != 10.0: false
+    let expression4 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsNotEqualTo,
+        right: Box::new(Expr::Integer(10.0))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression4),
+        Ok(Value::Boolean(false))
+    );
+
+    // 10.0 >= 10.0: true
+    let expression5 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsGreaterOrEqualTo,
+        right: Box::new(Expr::Integer(10.0))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression5),
+        Ok(Value::Boolean(true))
+    );
+
+    // 10.0 <= 10.0: true
+    let expression6 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsLessOrEqualTo,
+        right: Box::new(Expr::Integer(10.0))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression6),
+        Ok(Value::Boolean(true))
+    );
+}
+
+#[test]
+fn ok_evaluate_nested_binary_conditional_expression() {
+    let evaluater = Evaluater::new();
+
+    // 10.0 == (5.0 + 5.0): true
+    let expression1 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsEqualTo,
+        right: Box::new(
+            Expr::Binary {
+                left: Box::new(Expr::Integer(5.0)),
+                operator: BinaryOp::Add,
+                right: Box::new(Expr::Integer(5.0))
+            }
+        )
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression1),
+        Ok(Value::Boolean(true))
+    );
+
+    // 10.0 < (5.0 + 5.0): true
+    let expression2 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsLessThan,
+        right: Box::new(
+            Expr::Binary {
+                left: Box::new(Expr::Integer(5.0)),
+                operator: BinaryOp::Add,
+                right: Box::new(Expr::Integer(5.0))
+            }
+        )
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression2),
+        Ok(Value::Boolean(false))
+    );
+
+    // 10.0 > (5.0 + (15.0 - 5.0)): false
+    let expression3 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsGreaterThan,
+        right: Box::new(
+            Expr::Binary {
+                left: Box::new(Expr::Integer(5.0)),
+                operator: BinaryOp::Add,
+                right: Box::new(
+                    Expr::Binary {
+                        left: Box::new(Expr::Integer(15.0)),
+                        operator: BinaryOp::Subtract,
+                        right: Box::new(Expr::Integer(5.0))
+                    }
+                )
+            }
+        )
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression3),
+        Ok(Value::Boolean(false))
+    );
+
+    // 10.0 != (5.0 + (15.0 - 5.0)): true
+    let expression4 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsNotEqualTo,
+        right: Box::new(
+            Expr::Binary {
+                left: Box::new(Expr::Integer(5.0)),
+                operator: BinaryOp::Add,
+                right: Box::new(
+                    Expr::Binary {
+                        left: Box::new(Expr::Integer(15.0)),
+                        operator: BinaryOp::Subtract,
+                        right: Box::new(Expr::Integer(5.0))
+                    }
+                )
+            }
+        )
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression4),
+        Ok(Value::Boolean(true))
+    );
+
+    // 10.0 >= (5.0 + (15.0 - 5.0)): false
+    let expression5 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsGreaterOrEqualTo,
+        right: Box::new(
+            Expr::Binary {
+                left: Box::new(Expr::Integer(5.0)),
+                operator: BinaryOp::Add,
+                right: Box::new(
+                    Expr::Binary {
+                        left: Box::new(Expr::Integer(15.0)),
+                        operator: BinaryOp::Subtract,
+                        right: Box::new(Expr::Integer(5.0))
+                    }
+                )
+            }
+        )
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression5),
+        Ok(Value::Boolean(false))
+    );
+
+    // 10.0 <= (5.0 + (15.0 - 5.0)): true
+    let expression6 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsLessOrEqualTo,
+        right: Box::new(
+            Expr::Binary {
+                left: Box::new(Expr::Integer(5.0)),
+                operator: BinaryOp::Add,
+                right: Box::new(
+                    Expr::Binary {
+                        left: Box::new(Expr::Integer(15.0)),
+                        operator: BinaryOp::Subtract,
+                        right: Box::new(Expr::Integer(5.0))
+                    }
+                )
+            }
+        )
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression6),
+        Ok(Value::Boolean(true))
+    );
+    
+}
+
+#[test]
+fn ok_evaluate_conditional_expression_with_identifiers() {
+    let mut environment = Environment::new();
+
+    let _ = environment.define("x".to_string(), Value::Number(10.0));
+    let _ = environment.define("y".to_string(), Value::Number(5.0));
+    
+    let evaluater = Evaluater {environment};
+
+    // x(10.0) == y(5.0): false
+    let expression1 = Expr::Conditional {
+        left: Box::new(Expr::Identifier("x".to_string())),
+        operator: ConditionalOp::IsEqualTo,
+        right: Box::new(Expr::Identifier("y".to_string()))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression1),
+        Ok(Value::Boolean(false))
+    );
+
+    // x(10.0) > y(5.0): true
+    let expression2 = Expr::Conditional {
+        left: Box::new(Expr::Identifier("x".to_string())),
+        operator: ConditionalOp::IsGreaterThan,
+        right: Box::new(Expr::Identifier("y".to_string()))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression2),
+        Ok(Value::Boolean(true))
+    );
+
+    // x(10.0) < y(5.0): false
+    let expression3 = Expr::Conditional {
+        left: Box::new(Expr::Identifier("x".to_string())),
+        operator: ConditionalOp::IsLessThan,
+        right: Box::new(Expr::Identifier("y".to_string()))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression3),
+        Ok(Value::Boolean(false))
+    );
+}
+
+#[test]
+fn err_evaluate_conditional_expression() {
+    let evaluater = Evaluater::new();
+
+    // "x" == 10.0: Err()
+    let expression1 = Expr::Conditional {
+        left: Box::new(Expr::String("x".to_string())),
+        operator: ConditionalOp::IsEqualTo,
+        right: Box::new(Expr::Integer(10.0))
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression1),
+        Err(
+            EvalError::InvalidConditionalOperation {
+                left: Value::String("x".to_string()),
+                operator: ConditionalOp::IsEqualTo,
+                right: Value::Number(10.0)
+            }
+        )
+    );
+
+    // 10.0 == "x": Err()
+    let expression1 = Expr::Conditional {
+        left: Box::new(Expr::Integer(10.0)),
+        operator: ConditionalOp::IsEqualTo,
+        right: Box::new(Expr::String("x".to_string())),
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression1),
+        Err(
+            EvalError::InvalidConditionalOperation {
+                left: Value::Number(10.0),
+                operator: ConditionalOp::IsEqualTo,
+                right: Value::String("x".to_string()),
+            }
+        )
+    );
+
+    // "x" == "x": Err()
+    let expression1 = Expr::Conditional {
+        left: Box::new(Expr::String("x".to_string())),
+        operator: ConditionalOp::IsEqualTo,
+        right: Box::new(Expr::String("x".to_string())),
+    };
+
+    assert_eq!(
+        evaluater.eval_expression(&expression1),
+        Err(
+            EvalError::InvalidConditionalOperation {
+                left: Value::String("x".to_string()),
+                operator: ConditionalOp::IsEqualTo,
+                right: Value::String("x".to_string())
+            }
+        )
+    );
+}
