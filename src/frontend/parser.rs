@@ -411,7 +411,7 @@ impl<'a> Parser<'a> {
                 TokenKind::LessThan => ConditionalOp::IsLessThan,
                 TokenKind::GreaterOrEquals => ConditionalOp::IsGreaterOrEqualTo,
                 TokenKind::LessOrEquals => ConditionalOp::IsLessOrEqualTo,
-                TokenKind::ExEquals => ConditionalOp::IsNotEqualThan,
+                TokenKind::NotEquals => ConditionalOp::IsNotEqualTo,
                 _ => break
             };
 

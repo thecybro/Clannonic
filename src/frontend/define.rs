@@ -27,7 +27,7 @@ pub enum TokenKind {
     LessThan,
     Not,
     
-    ExEquals, // !=
+    NotEquals, // !=
     
     GreaterOrEquals,
     LessOrEquals,
@@ -106,7 +106,7 @@ pub struct Token<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConditionalOp {
     IsEqualTo,
-    IsNotEqualThan,
+    IsNotEqualTo,
     IsGreaterThan,
     IsLessThan,
     IsGreaterOrEqualTo,

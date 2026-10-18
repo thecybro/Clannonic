@@ -318,7 +318,7 @@ impl<'a> Lexer<'a> {
                     if next == '=' {
                         self.advance();
                         self.advance();
-                        self.token(TokenKind::ExEquals, start)
+                        self.token(TokenKind::NotEquals, start)
                     } else {
                         self.advance();
                         self.token(TokenKind::Not, start)
