@@ -17,9 +17,7 @@ pub enum TokenKind {
     DSlash, // //
     TSlash, // ///
     MSlash, // Any number of slashes above 3
-    
-    Space,
-    
+        
     Equals,
     EqualsEquals,
 
@@ -38,8 +36,6 @@ pub enum TokenKind {
     LBrace,
     RBrace,
 
-    SQuote, // '
-    DQuote, // ""
     Col, // :
     SemCol, // ;
     Comma, // ,
@@ -67,6 +63,7 @@ pub enum DataType {
     Integer, // int
     Float, // float
     String, // String
+    Boolean,
 }
 
 
@@ -127,7 +124,7 @@ pub enum BinaryOp {
 /// The types of expressions supported
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    Integer(f64),
+    Number(f64), // it supports only f64 for now, will support more later
     Identifier(String),
     String(String),
     Conditional {
@@ -178,8 +175,11 @@ pub enum Expr {
         left: Box<Expr>,
         operator: BinaryOp,
         right: Box<Expr>,
+    },
+    Function {
+        // We can add parameter field later
+        name: String,
     }
-
 }
 
 
@@ -201,11 +201,11 @@ pub enum Stmt {
         condition: Expr,
         body: Box<[Stmt]>,
     },
-    /// > This doesn't support arguments yet, nor can you actually use the `return` keyword yet,
-    /// > so the return indication is useless
+    /// > This doesn't support arguments yet
     Fn {
         name: String,
         return_type: Option<DataType>,
+        return_expr: Option<Expr>,
         body: Box<[Stmt]>
     }
 }

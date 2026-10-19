@@ -30,7 +30,7 @@ pub enum ParseError {
     // UnsupportedKeyword(String),
     StringToI64,
 }
-
+// .keyword()
 type Result<T> = std::result::Result<T, ParseError>;
 
 /// Public methods for the parser
@@ -359,8 +359,19 @@ impl<'a> Parser<'a> {
         self.advance()?; // consume the left brace {
 
         let mut body = vec![];
-
+        let mut return_expr = None;
+        
         loop {
+            if return_type != None {
+                let current = self.current()?;
+                if current.kind == TokenKind::Keyword(
+                    Keyword::Return
+                ) {
+                    self.advance()?;
+                    return_expr = Some(self.parse_expression()?);
+                }
+            }
+            
             if self.is_at_end() {
                 return Err(
                     ParseError::TokenExpected(
@@ -381,6 +392,7 @@ impl<'a> Parser<'a> {
             Stmt::Fn {
                 name,
                 return_type,
+                return_expr,
                 body: body.into_boxed_slice()
             }
         )
@@ -519,9 +531,9 @@ impl<'a> Parser<'a> {
         match token.kind {
             TokenKind::DataType(data_type) => match data_type {
                 DataType::Integer => {
-                    if let Some(integer) = parse_to_f64(token.lexeme) {
+                    if let Some(float) = parse_to_f64(token.lexeme) {
                         self.advance()?;
-                        Ok(Expr::Integer(integer))
+                        Ok(Expr::Number(float))
                     } else {
                         Err(ParseError::StringToI64)
                     }
@@ -541,9 +553,30 @@ impl<'a> Parser<'a> {
             },
             TokenKind::Identifier => {
                 // println!("returned the identifier");
+                let identifier = self.advance()?.lexeme.to_string();
+
+                
+                if self.current()?.kind == TokenKind::LParen {
+                    self.advance()?;
+                    if self.current()?.kind == TokenKind::RParen {
+                        self.advance()?;
+                        return Ok(
+                            Expr::Function {
+                                name: identifier
+                            }
+                        )
+                    } else {
+                        return Err(
+                            ParseError::TokenExpected(
+                                "Use a ')' to call the function expression".to_string()
+                            )
+                        )
+                    }
+                }
+                
                 Ok(
                     Expr::Identifier(
-                        self.advance()?.lexeme.to_string()
+                        identifier
                     )
                 )
             },
