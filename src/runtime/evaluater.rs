@@ -1,11 +1,14 @@
 
 use crate::frontend::{
-    BinaryOp, ConditionalOp, Expr, Program, Stmt,
+    BinaryOp, ConditionalOp, DataType, Expr, Program, Stmt,
 };
 
 use super::{
     Value,
     Environment,
+
+    Function,
+    FunctionRegistry,
 
     Result,
     EvalError,
@@ -13,24 +16,28 @@ use super::{
 
 #[derive(Debug)]
 pub struct Evaluater {
-    environment: Environment
+    environment: Environment,
+    function_registry: FunctionRegistry,
 }
 
 impl Evaluater {
     pub fn new() -> Self {
         Self {
             environment: Environment::new(),
+            function_registry: FunctionRegistry::new(),
         }
+    }
+
+    fn get_func(&self, name: &str) -> Option<&Function> {
+        self.function_registry.get(name)
     }
     
     pub fn evaluate(
         &mut self,
         program: &Program,
     ) -> Result<()> {
-
-        let statements: Vec<Stmt> = program.ast.to_vec();
         
-        for stmt in statements {
+        for stmt in program.ast.iter() {
             let _ = self.eval_statement(&stmt)?;
         }
 
@@ -53,8 +60,11 @@ impl Evaluater {
             Stmt::While { condition, body } => {
                 self.eval_while_statement(condition, body)
             },
-            Stmt::Fn { name, return_type, body } => {
-                todo!("Fn statement evaluater will be implemented in the upcoming commits")
+            Stmt::Fn { name, return_type, return_expr, body } => {
+                // Evaluation of function statement registers it
+                // 
+                // Evaluation of function expression executes it
+                self.eval_function_statement(name, return_type, return_expr, body)
             }
         }
     }
@@ -66,7 +76,7 @@ impl Evaluater {
     ) -> Result<Value> {
 
         let value = match expression {
-            Expr::Integer(num) => Value::Number(*num),
+            Expr::Number(num) => Value::Number(*num),
             Expr::Identifier(ident) => {
                 self.environment.get(ident)?.clone()
             },
@@ -83,17 +93,13 @@ impl Evaluater {
         body: &Box<[Stmt]>
     ) -> Result<()> {
 
-        let condition_result = self.eval_expression(condition)?;
-
-        if condition_result == Value::Boolean(true) {
-            for stmt in body.to_vec() {
+        if self.eval_expression(condition)? == Value::Boolean(true) {
+            for stmt in body.iter() {
                 self.eval_statement(&stmt)?
             }
         }
-
-        Ok(())
-
         
+        Ok(())
     }
 
     fn eval_while_statement(
@@ -103,21 +109,52 @@ impl Evaluater {
     ) -> Result<()> {
 
         while self.eval_expression(condition)? == Value::Boolean(true) {
-            for stmt in body.to_vec() {
+            for stmt in body.iter() {
                 self.eval_statement(&stmt)?
             }
         }
 
         Ok(())
     }
+
+    /// Evaluating a function statement means registering the
+    /// function to the registry, the actual execution
+    /// of the function body occurs only when it is called 
+    /// 
+    /// For example: 
+    /// ```
+    /// // It's just registered here
+    /// fn main() {
+    ///     // do something
+    /// }
+    /// 
+    /// let x = main() // the actual execution occurs here
+    /// ```
+    fn eval_function_statement(
+        &mut self,
+        name: &str,
+        return_type: &Option<DataType>,
+        return_expr: &Option<Expr>,
+        body: &Box<[Stmt]>
+    ) -> Result<()> {
+        
+        self.function_registry.register(
+            name,
+            return_type,
+            return_expr,
+            body
+        )?;
+
+        Ok(())
+    }
     
     fn eval_expression(
-        &self,
+        &mut self,
         expression: &Expr
     ) -> Result<Value> {
         
         match expression {
-            Expr::Integer(value) => Ok(Value::Number(*value)),
+            Expr::Number(value) => Ok(Value::Number(*value)),
             Expr::String(value) => Ok(Value::String(value.clone())),
             Expr::Identifier(name) => {
                 self.environment.get(name).cloned()
@@ -128,11 +165,14 @@ impl Evaluater {
             Expr::Conditional { left, operator, right } => {
                 self.eval_conditional_expression(left, operator, right)
             },
+            Expr::Function { name } => {
+                self.eval_function_expression(name)
+            }
         }
     }
 
     fn eval_binary_expression(
-        &self,
+        &mut self,
         left: &Expr,
         operator: &BinaryOp,
         right: &Expr 
@@ -175,7 +215,7 @@ impl Evaluater {
     }
 
     fn eval_conditional_expression(
-        &self,
+        &mut self,
         left: &Expr,
         operator: &ConditionalOp,
         right: &Expr
@@ -218,6 +258,62 @@ impl Evaluater {
             }
         }
     }
+
+    /// This is the actual function that evaluates/executes the function
+    /// when you call it by doing `let x = func_name()`
+    fn eval_function_expression(&mut self, name: &str) -> Result<Value> {
+        // Get the function from the registry if it's there
+        // 
+        // Note that currently, we are returning null
+        let Some(function) = self.get_func(name).cloned() else {
+            return Ok(Value::Null)
+        };
+
+        if let Some(return_type) = function.return_type {
+            if let Some(return_expr) = function.return_expr.as_ref() {
+                let value = self.eval_expression(return_expr)?;
+
+                match value {
+                    Value::Number(_) => {
+                        if return_type != DataType::Integer {
+                            return Err(
+                                EvalError::InvalidReturnType(value)
+                            )
+                        }
+                    },
+                    Value::String(_) => {
+                        if return_type != DataType::String {
+                            return Err(
+                                EvalError::InvalidReturnType(value)
+                            )
+                        }
+                    },
+                    Value::Boolean(_) => {
+                        if return_type != DataType::Boolean {
+                            return Err(
+                                EvalError::InvalidReturnType(value)
+                            )
+                        }
+                    },
+                    _ => return Err(
+                        EvalError::InvalidReturnType(value)
+                    )
+                }
+                
+                for stmt in function.body.iter() {
+                    self.eval_statement(stmt)?;
+                }
+                
+                return Ok(value)
+            } else {
+                Ok(Value::Null)
+            }
+        } else {
+            Ok(Value::Null)
+        }        
+
+        
+    }
 }
 
 #[test]
@@ -225,18 +321,20 @@ fn ok_evaluate_binary_expression_with_identifier() {
     // Create a manual environment so we can manually
     // define/insert values into the variable for testing
     let mut environment = Environment::new();
-
+    let function_registry = FunctionRegistry::new();
+    
     // Define the variable "x" with 5.0
     let _ = environment.define("x".to_string(), Value::Number(5.0));
     
-    let evaluater = Evaluater {
-        environment
+    let mut evaluater = Evaluater {
+        environment,
+        function_registry
     };
 
     let expression = Expr::Binary {
         left: Box::new(Expr::Identifier("x".to_string())),
         operator: BinaryOp::Add,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -250,18 +348,20 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
     // Create a manual environment so we can manually
     // define/insert values into the variable for testing
     let mut environment = Environment::new();
-
+    let function_registry = FunctionRegistry::new();
+    
     // Define the variable "x" with "a_string"
     let _ = environment.define("x".to_string(), Value::String("a_string".to_string()));
     
-    let evaluater = Evaluater {
-        environment
+    let mut evaluater = Evaluater {
+        environment,
+        function_registry
     };
 
     let expression = Expr::Binary {
         left: Box::new(Expr::Identifier("x".to_string())),
         operator: BinaryOp::Add,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -278,7 +378,7 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
     let expression2 = Expr::Binary {
         left: Box::new(Expr::Identifier("y".to_string())),
         operator: BinaryOp::Add,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -291,13 +391,13 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
 
 #[test]
 fn ok_evaluate_normal_binary_expression() {
-    let evaluater = Evaluater::new();
+    let mut evaluater = Evaluater::new();
 
     // 10.0 + 20.0 = 30.0
     let expression1 = Expr::Binary {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: BinaryOp::Add,
-        right: Box::new(Expr::Integer(20.0))
+        right: Box::new(Expr::Number(20.0))
     };
     
     assert_eq!(
@@ -307,9 +407,9 @@ fn ok_evaluate_normal_binary_expression() {
 
     // 20.0 - 10.0 = 10.0
     let expression2 = Expr::Binary {
-        left: Box::new(Expr::Integer(20.0)),
+        left: Box::new(Expr::Number(20.0)),
         operator: BinaryOp::Subtract,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -319,9 +419,9 @@ fn ok_evaluate_normal_binary_expression() {
 
     // 20.0 * 10.0 = 200.0
     let expression3 = Expr::Binary {
-        left: Box::new(Expr::Integer(20.0)),
+        left: Box::new(Expr::Number(20.0)),
         operator: BinaryOp::Multiply,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -331,9 +431,9 @@ fn ok_evaluate_normal_binary_expression() {
 
     // 20.0 / 10.0 = 2.0
     let expression4 = Expr::Binary {
-        left: Box::new(Expr::Integer(20.0)),
+        left: Box::new(Expr::Number(20.0)),
         operator: BinaryOp::Divide,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -345,12 +445,12 @@ fn ok_evaluate_normal_binary_expression() {
 
 #[test]
 fn err_evaluate_divide_by_zero() {
-    let evaluater = Evaluater::new();
+    let mut evaluater = Evaluater::new();
 
     let expression1 = Expr::Binary{
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: BinaryOp::Divide,
-        right: Box::new(Expr::Integer(0.0))
+        right: Box::new(Expr::Number(0.0))
     };
 
     assert_eq!(
@@ -365,13 +465,13 @@ fn err_evaluate_divide_by_zero() {
 
 #[test]
 fn err_evaluate_binary_expression_with_string() {
-    let evaluater = Evaluater::new();
+    let mut evaluater = Evaluater::new();
 
     // "something" + 20.0 = Err()
     let expression1 = Expr::Binary {
         left: Box::new(Expr::String("something".to_string())),
         operator: BinaryOp::Add,
-        right: Box::new(Expr::Integer(20.0))
+        right: Box::new(Expr::Number(20.0))
     };
     
     assert_eq!(
@@ -387,7 +487,7 @@ fn err_evaluate_binary_expression_with_string() {
     let expression2 = Expr::Binary {
         left: Box::new(Expr::String("something".to_string())),
         operator: BinaryOp::Subtract,
-        right: Box::new(Expr::Integer(20.0))
+        right: Box::new(Expr::Number(20.0))
     };
     
     assert_eq!(
@@ -403,7 +503,7 @@ fn err_evaluate_binary_expression_with_string() {
     let expression3 = Expr::Binary {
         left: Box::new(Expr::String("something".to_string())),
         operator: BinaryOp::Multiply,
-        right: Box::new(Expr::Integer(20.0))
+        right: Box::new(Expr::Number(20.0))
     };
     
     assert_eq!(
@@ -419,7 +519,7 @@ fn err_evaluate_binary_expression_with_string() {
     let expression4 = Expr::Binary {
         left: Box::new(Expr::String("something".to_string())),
         operator: BinaryOp::Divide,
-        right: Box::new(Expr::Integer(20.0))
+        right: Box::new(Expr::Number(20.0))
     };
     
     assert_eq!(
@@ -436,15 +536,15 @@ fn err_evaluate_binary_expression_with_string() {
 
 #[test]
 fn ok_evaluate_normal_nested_binary_expression() {
-    let evaluater = Evaluater::new();
+    let mut evaluater = Evaluater::new();
 
     let expression = Expr::Binary {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: BinaryOp::Add,
         right: Box::new(Expr::Binary {
-            left: Box::new(Expr::Integer(20.0)),
+            left: Box::new(Expr::Number(20.0)),
             operator: BinaryOp::Multiply,
-            right: Box::new(Expr::Integer(2.0))
+            right: Box::new(Expr::Number(2.0))
         })
     };
 
@@ -456,13 +556,13 @@ fn ok_evaluate_normal_nested_binary_expression() {
 
 #[test]
 fn err_evaluate_invalid_binary_expression() {
-    let evaluater = Evaluater::new();
+    let mut evaluater = Evaluater::new();
     
     let expression = Expr::Binary {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: BinaryOp::Add,
         right: Box::new(Expr::Binary {
-            left: Box::new(Expr::Integer(20.0)),
+            left: Box::new(Expr::Number(20.0)),
             operator: BinaryOp::Multiply,
             right: Box::new(Expr::String("invalid".to_string()))
         })
@@ -480,13 +580,13 @@ fn err_evaluate_invalid_binary_expression() {
 
 #[test]
 fn ok_evaluate_conditional_expression() {
-    let evaluater = Evaluater::new();
+    let mut evaluater = Evaluater::new();
 
     // 10.0 == 10.0: true
     let expression1 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsEqualTo,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -496,9 +596,9 @@ fn ok_evaluate_conditional_expression() {
 
     // 10.0 > 10.0: false
     let expression2 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsGreaterThan,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -508,9 +608,9 @@ fn ok_evaluate_conditional_expression() {
 
     // 10.0 < 10.0: false
     let expression3 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsLessThan,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -520,9 +620,9 @@ fn ok_evaluate_conditional_expression() {
 
     // 10.0 != 10.0: false
     let expression4 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsNotEqualTo,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -532,9 +632,9 @@ fn ok_evaluate_conditional_expression() {
 
     // 10.0 >= 10.0: true
     let expression5 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsGreaterOrEqualTo,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -544,9 +644,9 @@ fn ok_evaluate_conditional_expression() {
 
     // 10.0 <= 10.0: true
     let expression6 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsLessOrEqualTo,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -557,17 +657,17 @@ fn ok_evaluate_conditional_expression() {
 
 #[test]
 fn ok_evaluate_nested_binary_conditional_expression() {
-    let evaluater = Evaluater::new();
+    let mut evaluater = Evaluater::new();
 
     // 10.0 == (5.0 + 5.0): true
     let expression1 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsEqualTo,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Integer(5.0)),
+                left: Box::new(Expr::Number(5.0)),
                 operator: BinaryOp::Add,
-                right: Box::new(Expr::Integer(5.0))
+                right: Box::new(Expr::Number(5.0))
             }
         )
     };
@@ -579,13 +679,13 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     // 10.0 < (5.0 + 5.0): true
     let expression2 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsLessThan,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Integer(5.0)),
+                left: Box::new(Expr::Number(5.0)),
                 operator: BinaryOp::Add,
-                right: Box::new(Expr::Integer(5.0))
+                right: Box::new(Expr::Number(5.0))
             }
         )
     };
@@ -597,17 +697,17 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     // 10.0 > (5.0 + (15.0 - 5.0)): false
     let expression3 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsGreaterThan,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Integer(5.0)),
+                left: Box::new(Expr::Number(5.0)),
                 operator: BinaryOp::Add,
                 right: Box::new(
                     Expr::Binary {
-                        left: Box::new(Expr::Integer(15.0)),
+                        left: Box::new(Expr::Number(15.0)),
                         operator: BinaryOp::Subtract,
-                        right: Box::new(Expr::Integer(5.0))
+                        right: Box::new(Expr::Number(5.0))
                     }
                 )
             }
@@ -621,17 +721,17 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     // 10.0 != (5.0 + (15.0 - 5.0)): true
     let expression4 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsNotEqualTo,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Integer(5.0)),
+                left: Box::new(Expr::Number(5.0)),
                 operator: BinaryOp::Add,
                 right: Box::new(
                     Expr::Binary {
-                        left: Box::new(Expr::Integer(15.0)),
+                        left: Box::new(Expr::Number(15.0)),
                         operator: BinaryOp::Subtract,
-                        right: Box::new(Expr::Integer(5.0))
+                        right: Box::new(Expr::Number(5.0))
                     }
                 )
             }
@@ -645,17 +745,17 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     // 10.0 >= (5.0 + (15.0 - 5.0)): false
     let expression5 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsGreaterOrEqualTo,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Integer(5.0)),
+                left: Box::new(Expr::Number(5.0)),
                 operator: BinaryOp::Add,
                 right: Box::new(
                     Expr::Binary {
-                        left: Box::new(Expr::Integer(15.0)),
+                        left: Box::new(Expr::Number(15.0)),
                         operator: BinaryOp::Subtract,
-                        right: Box::new(Expr::Integer(5.0))
+                        right: Box::new(Expr::Number(5.0))
                     }
                 )
             }
@@ -669,17 +769,17 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     // 10.0 <= (5.0 + (15.0 - 5.0)): true
     let expression6 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsLessOrEqualTo,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Integer(5.0)),
+                left: Box::new(Expr::Number(5.0)),
                 operator: BinaryOp::Add,
                 right: Box::new(
                     Expr::Binary {
-                        left: Box::new(Expr::Integer(15.0)),
+                        left: Box::new(Expr::Number(15.0)),
                         operator: BinaryOp::Subtract,
-                        right: Box::new(Expr::Integer(5.0))
+                        right: Box::new(Expr::Number(5.0))
                     }
                 )
             }
@@ -696,11 +796,12 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 #[test]
 fn ok_evaluate_conditional_expression_with_identifiers() {
     let mut environment = Environment::new();
-
+    let function_registry = FunctionRegistry::new();
+    
     let _ = environment.define("x".to_string(), Value::Number(10.0));
     let _ = environment.define("y".to_string(), Value::Number(5.0));
     
-    let evaluater = Evaluater {environment};
+    let mut evaluater = Evaluater {environment, function_registry};
 
     // x(10.0) == y(5.0): false
     let expression1 = Expr::Conditional {
@@ -741,13 +842,13 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
 
 #[test]
 fn err_evaluate_conditional_expression() {
-    let evaluater = Evaluater::new();
+    let mut evaluater = Evaluater::new();
 
     // "x" == 10.0: Err()
     let expression1 = Expr::Conditional {
         left: Box::new(Expr::String("x".to_string())),
         operator: ConditionalOp::IsEqualTo,
-        right: Box::new(Expr::Integer(10.0))
+        right: Box::new(Expr::Number(10.0))
     };
 
     assert_eq!(
@@ -763,7 +864,7 @@ fn err_evaluate_conditional_expression() {
 
     // 10.0 == "x": Err()
     let expression1 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10.0)),
+        left: Box::new(Expr::Number(10.0)),
         operator: ConditionalOp::IsEqualTo,
         right: Box::new(Expr::String("x".to_string())),
     };
@@ -806,12 +907,12 @@ fn ok_evaluate_let_statement_to_define_and_access_value_and_test_with_binary_exp
     let define_stmt = Stmt::Let {
         identifier: "x".to_string(),
         expression: Expr::Binary {
-            left: Box::new(Expr::Integer(10.0)),
+            left: Box::new(Expr::Number(10.0)),
             operator: BinaryOp::Add,
             right: Box::new(Expr::Binary {
-                left: Box::new(Expr::Integer(10.0)),
+                left: Box::new(Expr::Number(10.0)),
                 operator: BinaryOp::Add,
-                right: Box::new(Expr::Integer(10.0))
+                right: Box::new(Expr::Number(10.0))
             })
         }
     };
@@ -825,12 +926,12 @@ fn ok_evaluate_let_statement_to_define_and_access_value_and_test_with_binary_exp
     let access_stmt = Stmt::Let {
         identifier: "y".to_string(),
         expression: Expr::Binary {
-            left: Box::new(Expr::Integer(10.0)),
+            left: Box::new(Expr::Number(10.0)),
             operator: BinaryOp::Add,
             right: Box::new(Expr::Binary {
                 left: Box::new(Expr::Identifier("x".to_string())),
                 operator: BinaryOp::Add,
-                right: Box::new(Expr::Integer(10.0))
+                right: Box::new(Expr::Number(10.0))
             })
         }
     };
