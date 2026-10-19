@@ -113,7 +113,7 @@ impl<'a> Parser<'a> {
                 self.parse_while_stmt()
             },
             Keyword::Fn => {
-                self.parse_fn_stmt()
+                self.parse_function_stmt()
             },
             _ => return Err(
                 ParseError::KeywordNotSupported(
@@ -270,7 +270,7 @@ impl<'a> Parser<'a> {
     /// 
     /// > This doesn't support arguments yet, nor can you actually use the `return` keyword yet,
     /// > so the return indication is useless
-    fn parse_fn_stmt(&mut self) -> Result<Stmt> {
+    fn parse_function_stmt(&mut self) -> Result<Stmt> {
         self.advance()?; // Consume the fn token
 
         if self.current()?.kind != TokenKind::Identifier {
@@ -362,13 +362,42 @@ impl<'a> Parser<'a> {
         let mut return_expr = None;
         
         loop {
-            if return_type != None {
-                let current = self.current()?;
-                if current.kind == TokenKind::Keyword(
+            if let Some(ret_type) = return_type {
+                if self.current()?.kind == TokenKind::Keyword(
                     Keyword::Return
                 ) {
                     self.advance()?;
-                    return_expr = Some(self.parse_expression()?);
+                    let expr_result = self.parse_expression()?;
+
+                    // It's obvious in the case of number/integer and string
+                    // 
+                    // But which DataType do we need if we have an identifier
+                    // expression?
+                    // 
+                    // Since identifier is not a data type, and same with 
+                    match expr_result {
+                        Expr::Number(_) => {
+                            if !matches!(ret_type, DataType::Integer | DataType::Float) {
+                                return Err(
+                                    ParseError::InvalidDataType(
+                                        format!("Expected an integer or a float but got '{ret_type:#?}' instead!")
+                                    )
+                                )
+                            }
+                        },
+                        Expr::String(_) => {
+                            if ret_type != DataType::String {
+                                return Err(
+                                    ParseError::InvalidDataType(
+                                        format!("Expected a string but got '{ret_type:#?}' instead!")
+                                    )
+                                )
+                            }
+                        },
+                        _ => {},
+                    }
+
+                    return_expr = Some(expr_result)
                 }
             }
             
@@ -557,9 +586,9 @@ impl<'a> Parser<'a> {
 
                 
                 if self.current()?.kind == TokenKind::LParen {
-                    self.advance()?;
-                    if self.current()?.kind == TokenKind::RParen {
-                        self.advance()?;
+                    if self.peek()?.kind == TokenKind::RParen {
+                        self.advance()?; // (
+                        self.advance()?; // )
                         return Ok(
                             Expr::Function {
                                 name: identifier
@@ -572,6 +601,12 @@ impl<'a> Parser<'a> {
                             )
                         )
                     }
+                } else if self.current()?.kind == TokenKind::RParen {
+                    return Err(
+                        ParseError::TokenExpected(
+                            "Got a ')'.. Use '()' instead if you want to call a function!".to_string()
+                        )
+                    )
                 }
                 
                 Ok(
