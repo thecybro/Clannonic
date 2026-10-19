@@ -163,15 +163,20 @@ impl<'a> Lexer<'a> {
     /// will be part of one string
     fn consume_string(&mut self) {
         // Assuming the caller called it when the current token was ",
-        // so we consume it believing it's an "
+        // so we consume it believing it's an " or '
         self.advance(); 
         
         while let Some(current) = self.current() {
-            if current == '"' {
-                self.advance(); // we found the next closing "
-                break
-            } else {
-                self.advance();
+            match current {
+                '"' => {
+                    self.advance();
+                    break
+                },
+                '\'' => { // This means a '
+                    self.advance();
+                    break
+                },
+                _ => break
             }
         }
     }
@@ -334,7 +339,8 @@ impl<'a> Lexer<'a> {
             },
             '\'' => {
                 self.consume_string();
-                self.token(TokenKind::SQuote, start)
+                // self.token(TokenKind::SQuote, start)
+                self.token(TokenKind::DataType(DataType::String), start)
             },
             '+' => {
                 self.advance();
