@@ -8,12 +8,14 @@ pub enum Value {
     Number(f64),
     String(String),
     Boolean(bool),
+    Null,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum EvalError {
     UndefinedVariable(String),
     DuplicateVariable(String),
+    InvalidReturnType(Value),
     InvalidBinaryOperation {
         left: Value,
         operator: BinaryOp,
