@@ -22,7 +22,7 @@ use frontend::Lexer;
 use frontend::{Parser, ParseError};
 use runtime::{Evaluater, EvalError};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
     ParseError(ParseError),
     EvaluateError(EvalError),
@@ -40,9 +40,11 @@ impl From<EvalError> for Error {
     }
 }
 
+type Result<T> = std::result::Result<T, Error>;
+
 /// A simple glue for the lexer and parser (and evaluater/code generator later)
 /// which calls and takes return value from one and gives it to other
-fn main() -> Result<(), Error> {
+fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let mut path = String::new();
 
@@ -57,6 +59,10 @@ fn main() -> Result<(), Error> {
 
     let source = fs::read_to_string(path.trim()).expect(&msg);
 
+    run(&source)
+}
+
+fn run(source: &str) -> Result<()> {
     let tokens = Lexer::new(&source).get_lexed();
     // println!("{tokens:#?}");
 
@@ -66,6 +72,21 @@ fn main() -> Result<(), Error> {
     let result = Evaluater::new().evaluate(&parsed);
 
     println!("{result:#?}");
-    
+
     Ok(())
+}
+
+#[test]
+fn test_end_to_end() {
+    let source = "fn main() -> int {
+        let x = 1
+        return x
+    }
+    
+    let y = main()";
+    
+    assert_eq!(
+        run(&source),
+        Ok(())
+    )
 }
