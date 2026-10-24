@@ -45,6 +45,15 @@ impl FunctionRegistry {
         return_expr: &Option<Expr>,
         body: &Box<[Stmt]>
     ) -> Result<()> {
+
+        if self.functions.contains_key(name) {
+            return Err(
+                EvalError::DuplicateFunctionDeclaration(
+                    name.to_string()
+                )
+            )
+        }
+        
         let function = Function {
             name: name.to_string(),
             return_type: *return_type,

@@ -16,6 +16,7 @@ pub enum EvalError {
     UndefinedVariable(String),
     DuplicateVariable(String),
     InvalidReturnType(Value),
+    DuplicateFunctionDeclaration(String),
     InvalidBinaryOperation {
         left: Value,
         operator: BinaryOp,
