@@ -26,7 +26,7 @@ pub struct FunctionRegistry {
     functions: HashMap<String, Function>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Environment {
     values: HashMap<String, Value>,
 }
@@ -83,7 +83,7 @@ impl Environment {
 
     pub fn define(
         &mut self,
-        name: String,
+        name: &str,
         value: Value
     ) -> Result<Value> {
 
@@ -102,7 +102,7 @@ impl Environment {
         //     )
         // }
 
-        self.values.insert(name.clone(), value.clone());
+        self.values.insert(name.to_string(), value.clone());
 
         println!("\nStored '{value:#?}' in '{name:#?}'\n");
         
@@ -125,7 +125,7 @@ fn ok_and_err_environment_define_and_get() {
 
     assert_eq!(
         environment.define(
-            "x".to_owned(),
+            "x",
             Value::Number(10.0),
         ),
         Ok(Value::Number(10.0)),
@@ -133,7 +133,7 @@ fn ok_and_err_environment_define_and_get() {
 
     assert_eq!(
         environment.define(
-            "y".to_owned(),
+            "y",
             Value::String("something".to_string())
         ),
         Ok(Value::String("something".to_string()))

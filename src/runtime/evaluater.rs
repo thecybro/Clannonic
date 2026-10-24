@@ -75,16 +75,9 @@ impl Evaluater {
         expression: &Expr
     ) -> Result<Value> {
 
-        let value = match expression {
-            Expr::Number(num) => Value::Number(*num),
-            Expr::Identifier(ident) => {
-                self.environment.get(ident)?.clone()
-            },
-            Expr::String(a_string) => Value::String(a_string.clone()),
-            _ => self.eval_expression(expression)?
-        };
+        let value = self.eval_expression(expression)?;
 
-        self.environment.define(identifier.to_string(), value)
+        self.environment.define(identifier, value)
     }
 
     fn eval_if_statement(
@@ -324,7 +317,7 @@ fn ok_evaluate_binary_expression_with_identifier() {
     let function_registry = FunctionRegistry::new();
     
     // Define the variable "x" with 5.0
-    let _ = environment.define("x".to_string(), Value::Number(5.0));
+    let _ = environment.define("x", Value::Number(5.0));
     
     let mut evaluater = Evaluater {
         environment,
@@ -351,7 +344,7 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
     let function_registry = FunctionRegistry::new();
     
     // Define the variable "x" with "a_string"
-    let _ = environment.define("x".to_string(), Value::String("a_string".to_string()));
+    let _ = environment.define("x", Value::String("a_string".to_string()));
     
     let mut evaluater = Evaluater {
         environment,
@@ -798,8 +791,8 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
     let mut environment = Environment::new();
     let function_registry = FunctionRegistry::new();
     
-    let _ = environment.define("x".to_string(), Value::Number(10.0));
-    let _ = environment.define("y".to_string(), Value::Number(5.0));
+    let _ = environment.define("x", Value::Number(10.0));
+    let _ = environment.define("y", Value::Number(5.0));
     
     let mut evaluater = Evaluater {environment, function_registry};
 
