@@ -141,6 +141,7 @@ impl<'a> Lexer<'a> {
             "String" => TokenKind::DataType(DataType::String),
             "int" => TokenKind::DataType(DataType::Integer),
             "float" => TokenKind::DataType(DataType::Float),
+            "bool" => TokenKind::DataType(DataType::Boolean),
             _ => TokenKind::Identifier
         }
     }

@@ -63,7 +63,7 @@ pub enum DataType {
     Integer, // int
     Float, // float
     String, // String
-    Boolean,
+    Boolean, // bool
 }
 
 
