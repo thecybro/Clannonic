@@ -282,7 +282,6 @@ impl<'a> Parser<'a> {
             )
         }
 
-        // let name = self.parse_expression()?; // This will give us the identifier
         let name = if let Ok(current) = self.current() {
             let curr = current.lexeme.to_string();
             
@@ -298,6 +297,7 @@ impl<'a> Parser<'a> {
 
             curr
         } else {
+            // We have no more tokens left
             return Err(
                 ParseError::TokenExpected(
                     format!("Expected an identifier before end of file!")

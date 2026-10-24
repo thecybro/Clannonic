@@ -162,24 +162,32 @@ impl<'a> Lexer<'a> {
     /// Keep consuming until we find 1 double quote,
     /// when we find it, whatever we consumed
     /// will be part of one string
-    fn consume_string(&mut self) {
-        // Assuming the caller called it when the current token was ",
-        // so we consume it believing it's an " or '
+    fn consume_string(&mut self, quote: char) {
+        // We are giving caller the authority to choose any
+        // quote they want, and this function will consume the
+        // current character if it matches that what we got in
+        // quote and keep consuming until we encounter another
+        // instance of that quote/character
+
+        if let Some(current) = self.current() {
+            if self.current() != Some(quote) {
+                panic!("The current character '{current}' is not a valid character to create a string")
+            }
+        }
         self.advance(); 
         
         while let Some(current) = self.current() {
-            match current {
-                '"' => {
-                    self.advance();
-                    break
-                },
-                '\'' => { // This means a '
-                    self.advance();
-                    break
-                },
-                _ => break
+            if current == quote {
+                self.advance();
+                return;
             }
+
+            self.advance();
         }
+
+        // We ideally wont reach in this line but if we somehow
+        // reach here, some problem has occured
+        panic!("Unterminated string literal!")
     }
     
     /// Keep consuming until we keep getting slashes, this will allow the which_slash()
@@ -335,11 +343,11 @@ impl<'a> Lexer<'a> {
                 }
             },
             '"' => {
-                self.consume_string();
+                self.consume_string('"');
                 self.token(TokenKind::DataType(DataType::String), start)
             },
             '\'' => {
-                self.consume_string();
+                self.consume_string('\'');
                 // self.token(TokenKind::SQuote, start)
                 self.token(TokenKind::DataType(DataType::String), start)
             },
