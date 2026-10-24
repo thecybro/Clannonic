@@ -11,3 +11,7 @@ in **Clanix** instead of having to do all things manually.
 You can find the information about **Clanix**; a developer tool at 
 [Clanix](https://github.com/Clannon-Labs/Clanix)
 
+> [!NOTE]
+> If there are open PR(s) named upgrade/update/feature or anything that sounds like
+> a big change, please review those to get the information of where the current progress
+> is
