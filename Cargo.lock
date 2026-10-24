@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "clannonic"
+name = "clannonic-test"
 version = "0.1.0"

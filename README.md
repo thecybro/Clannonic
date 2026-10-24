@@ -12,6 +12,6 @@ You can find the information about **Clanix**; a developer tool at
 [Clanix](https://github.com/Clannon-Labs/Clanix)
 
 > [!NOTE]
-> The main branch doesn't have anything to look for, please look at the open PR(s) to see
-> the current state of the project.
-> 
+> If there are open PR(s) named upgrade/update/feature or anything that sounds like
+> a big change, please review those to get the information of where the current progress
+> is

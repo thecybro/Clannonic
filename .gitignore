@@ -1,4 +1,4 @@
 /target
-examples/
-*.cln
-tests/
+# examples/
+main.cln
+# tests/

@@ -1,93 +1,92 @@
+//! This is the language I am experimenting with, whose name is not yet
+//! decided but I am going with **clannonic** for now.
+//! 
+//! For now, it's just a test crate but later when it can run/evaluate basic code,
+//! I am planning to integrate it with my other project **Clanix** to make it the
+//! programatic/scripting layer for it allowing users to automate the tasks
+//! in **Clanix** instead of having to do all things manually.
+//! 
+//! You can find the information about **Clanix**; a developer tool at 
+//! [Clanix](https://github.com/Clannon-Labs/Clanix)
+//!
 
 use std::{
-    io::{
-        // self,
-        // Write,
-        BufRead,
-        BufReader,
-    },
-    fs::File,
+    env,
+    fs,
 };
-use std::env;
-use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
 
+mod frontend;
+mod runtime;
 
-mod parser;
-mod lexer;
-mod evaluater;
-mod store;
+use frontend::Lexer;
+use frontend::{Parser, ParseError};
+use runtime::{Evaluater, EvalError};
 
-static STACK: LazyLock<Mutex<HashMap<String, f64>>> = LazyLock::new(|| {
-    Mutex::new(HashMap::new()) // start with no elements
-});
-
-struct Store;
-
-#[derive(Debug)]
-enum Token {
-    Number(f64),
-    Plus,
-    Minus,
-    Star,
-    Slash,
-
-    LeftParen,
-    RightParen,
-    
-    Variable(String),
-    Equals,
-
-    Eof,
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    ParseError(ParseError),
+    EvaluateError(EvalError),
 }
 
-#[derive(Debug)]
-enum Operator {
-    // Option<String> is the variable
-    Add(f64, f64, Option<String>),
-    Subtract(f64, f64, Option<String>),
-    Multiply(f64, f64, Option<String>),
-    Divide(f64, f64, Option<String>),
-    Insert(String, f64),
+impl From<ParseError> for Error {
+    fn from(err: ParseError) -> Self {
+        Error::ParseError(err)
+    }
 }
 
-#[derive(Debug)]
-enum Expression {
-    Operation(Operator),
-    Skip,
+impl From<EvalError> for Error {
+    fn from(err: EvalError) -> Self {
+        Error::EvaluateError(err)
+    }
 }
 
-struct Lexer {
-    tokens: Vec<Token>
-}
+type Result<T> = std::result::Result<T, Error>;
 
-struct Parser;
-
-struct Evaluater;
-
-fn main() {
-    let mut input = String::new();
-
+/// A simple glue for the lexer and parser (and evaluater/code generator later)
+/// which calls and takes return value from one and gives it to other
+fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
+    let mut path = String::new();
 
+    
     if args.len() > 1 {
-        input = args[1].clone();
+        path = args[1].clone();
     } else {
-        println!("Clanix interpreter")
+        println!("Clannonic")
+    }
+
+    let msg = format!("Couldn't read file {path}");
+
+    let source = fs::read_to_string(path.trim()).expect(&msg);
+
+    run(&source)
+}
+
+fn run(source: &str) -> Result<()> {
+    let tokens = Lexer::new(&source).get_lexed();
+    // println!("{tokens:#?}");
+
+    let parsed = Parser::new(tokens).parse()?;
+    // println!("{parsed:#?}");
+    
+    let result = Evaluater::new().evaluate(&parsed);
+
+    println!("{result:#?}");
+
+    Ok(())
+}
+
+#[test]
+fn test_end_to_end() {
+    let source = "fn main() -> int {
+        let x = 1
+        return x
     }
     
-    let file = File::open(&input.trim()).unwrap();
-    let reader = BufReader::new(file);
-
-    for line in reader.lines() {
-        let line = line.unwrap();
-
-        // println!("Line: {}", line);
-
-        let lexed = Lexer::new(&line);
-        let parsed = Parser::new(&lexed.tokens);
-        if let Some(result) = Evaluater::new(parsed) {
-            println!("{}", result)
-        }
-    }
+    let y = main()";
+    
+    assert_eq!(
+        run(&source),
+        Ok(())
+    )
 }
