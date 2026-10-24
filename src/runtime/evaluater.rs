@@ -264,6 +264,9 @@ impl Evaluater {
 
         if let Some(return_type) = function.return_type {
             if let Some(return_expr) = function.return_expr.as_ref() {
+                for stmt in function.body.iter() {
+                    self.eval_statement(stmt)?;
+                }
                 let value = self.eval_expression(return_expr)?;
 
                 match value {
@@ -292,11 +295,7 @@ impl Evaluater {
                         EvalError::InvalidReturnType(value)
                     )
                 }
-                
-                for stmt in function.body.iter() {
-                    self.eval_statement(stmt)?;
-                }
-                
+            
                 return Ok(value)
             } else {
                 Ok(Value::Null)
