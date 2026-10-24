@@ -11,12 +11,9 @@ Currently, the language is very simple and intuitive.
 It also doesn't have concept of any types or scopes yet
 
 Here are the example ways you can use it:
-> Note that as of October 13, 2026, I haven't written the evaluater
-or code generator yet, so you can't actually use the language, but you can observe the tokens it produces and
-AST it generates.
+> [!NOTE]
+> These are examples of the valid syntax as od october 24 2026 and may/may not change later
 >
-> I have written these examples assuming if there was an evaluater/code generator now
-
 ## Examples
 > [!NOTE]
 > The limitation as of October 13, 2026 is that even once you initialize a variable
@@ -34,6 +31,8 @@ for it isn't there yet, I will add it soon
 let x = 1
 let y = 2
 let z = "a_string"
+
+let a = main() // store the return value of main in 'a'
 ```
 
 ### Add 2 numbers
@@ -81,5 +80,26 @@ while x > 2 {
 ```
 fn main() -> String {
   let x = "smt"
+
+  return x
 }
+```
+
+```
+fn sum_of_five_nums() -> int {
+  let x = 1
+  let sum = 0
+
+  while x <= 5 {
+    let sum = sum + x
+
+    let x = x + 1
+  }
+
+  return sum
+}
+
+// Now sum stores the sum
+let sum = sum_of_five_nums() 
+
 ```
