@@ -615,7 +615,7 @@ fn ok_evaluate_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression1),
-        Ok(Value::Boolean(true))
+        Ok(Value::Boolean(BooleanType::True))
     );
 
     // 10.0 > 10.0: false
@@ -627,7 +627,7 @@ fn ok_evaluate_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression2),
-        Ok(Value::Boolean(false))
+        Ok(Value::Boolean(BooleanType::False))
     );
 
     // 10.0 < 10.0: false
@@ -639,7 +639,7 @@ fn ok_evaluate_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression3),
-        Ok(Value::Boolean(false))
+        Ok(Value::Boolean(BooleanType::False))
     );
 
     // 10.0 != 10.0: false
@@ -651,7 +651,7 @@ fn ok_evaluate_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression4),
-        Ok(Value::Boolean(false))
+        Ok(Value::Boolean(BooleanType::False))
     );
 
     // 10.0 >= 10.0: true
@@ -663,7 +663,7 @@ fn ok_evaluate_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression5),
-        Ok(Value::Boolean(true))
+        Ok(Value::Boolean(BooleanType::True))
     );
 
     // 10.0 <= 10.0: true
@@ -675,7 +675,7 @@ fn ok_evaluate_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression6),
-        Ok(Value::Boolean(true))
+        Ok(Value::Boolean(BooleanType::True))
     );
 }
 
@@ -698,7 +698,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression1),
-        Ok(Value::Boolean(true))
+        Ok(Value::Boolean(BooleanType::True))
     );
 
     // 10.0 < (5.0 + 5.0): true
@@ -716,7 +716,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression2),
-        Ok(Value::Boolean(false))
+        Ok(Value::Boolean(BooleanType::False))
     );
 
     // 10.0 > (5.0 + (15.0 - 5.0)): false
@@ -740,7 +740,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression3),
-        Ok(Value::Boolean(false))
+        Ok(Value::Boolean(BooleanType::False))
     );
 
     // 10.0 != (5.0 + (15.0 - 5.0)): true
@@ -764,7 +764,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression4),
-        Ok(Value::Boolean(true))
+        Ok(Value::Boolean(BooleanType::True))
     );
 
     // 10.0 >= (5.0 + (15.0 - 5.0)): false
@@ -788,7 +788,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression5),
-        Ok(Value::Boolean(false))
+        Ok(Value::Boolean(BooleanType::False))
     );
 
     // 10.0 <= (5.0 + (15.0 - 5.0)): true
@@ -812,7 +812,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     assert_eq!(
         evaluater.eval_expression(&expression6),
-        Ok(Value::Boolean(true))
+        Ok(Value::Boolean(BooleanType::True))
     );
     
 }
@@ -836,7 +836,7 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
 
     assert_eq!(
         evaluater.eval_expression(&expression1),
-        Ok(Value::Boolean(false))
+        Ok(Value::Boolean(BooleanType::False))
     );
 
     // x(10.0) > y(5.0): true
@@ -848,7 +848,7 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
 
     assert_eq!(
         evaluater.eval_expression(&expression2),
-        Ok(Value::Boolean(true))
+        Ok(Value::Boolean(BooleanType::True))
     );
 
     // x(10.0) < y(5.0): false
@@ -860,7 +860,7 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
 
     assert_eq!(
         evaluater.eval_expression(&expression3),
-        Ok(Value::Boolean(false))
+        Ok(Value::Boolean(BooleanType::False))
     );
 }
 
@@ -986,6 +986,6 @@ fn ok_evaluate_let_statement_to_define_and_access_value_and_test_with_binary_exp
 
     assert_eq!(
         evaluater.eval_expression(&expression2),
-        Ok(Value::Boolean(true))
+        Ok(Value::Boolean(BooleanType::True))
     );
 }
