@@ -1,6 +1,6 @@
 
 use crate::frontend::{
-    BinaryOp, ConditionalOp, DataType, Expr, Program, Stmt,
+    BinaryOp, BooleanType, ConditionalOp, DataType, Expr, Program, Stmt,
 };
 
 use super::{
@@ -86,7 +86,7 @@ impl Evaluater {
         body: &Box<[Stmt]>
     ) -> Result<()> {
 
-        if self.eval_expression(condition)? == Value::Boolean(true) {
+        if self.eval_expression(condition)? == Value::Boolean(BooleanType::True) {
             for stmt in body.iter() {
                 self.eval_statement(&stmt)?
             }
@@ -101,7 +101,7 @@ impl Evaluater {
         body: &Box<[Stmt]>
     ) -> Result<()> {
 
-        while self.eval_expression(condition)? == Value::Boolean(true) {
+        while self.eval_expression(condition)? == Value::Boolean(BooleanType::True) {
             for stmt in body.iter() {
                 self.eval_statement(&stmt)?
             }
@@ -152,6 +152,9 @@ impl Evaluater {
             Expr::Identifier(name) => {
                 self.environment.get(name).cloned()
             },
+            Expr::Boolean(boolean_type) => {
+                self.eval_boolean_expression(boolean_type)
+            }
             Expr::Binary { left, operator, right } => {
                 self.eval_binary_expression(left, operator, right)
             }
@@ -164,6 +167,16 @@ impl Evaluater {
         }
     }
 
+    fn eval_boolean_expression(
+        &mut self,
+        boolean_type: &BooleanType
+    ) -> Result<Value> {
+        match boolean_type {
+            BooleanType::True => Ok(Value::Boolean(BooleanType::True)),
+            BooleanType::False => Ok(Value::Boolean(BooleanType::False))
+        }
+    }
+    
     fn eval_binary_expression(
         &mut self,
         left: &Expr,
@@ -221,22 +234,34 @@ impl Evaluater {
             (Value::Number(left), Value::Number(right)) => {
                 match operator {
                     ConditionalOp::IsEqualTo => {
-                        Ok(Value::Boolean(left == right))
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left == right))
+                        )
                     },
                     ConditionalOp::IsNotEqualTo => {
-                        Ok(Value::Boolean(left != right))
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left != right))
+                        )
                     },
                     ConditionalOp::IsGreaterThan => {
-                        Ok(Value::Boolean(left > right))
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left > right))
+                        )
                     },
                     ConditionalOp::IsLessThan => {
-                        Ok(Value::Boolean(left < right))
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left < right))
+                        )
                     },
                     ConditionalOp::IsGreaterOrEqualTo => {
-                        Ok(Value::Boolean(left >= right ))
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left >= right))
+                        )
                     },
                     ConditionalOp::IsLessOrEqualTo => {
-                        Ok(Value::Boolean(left <= right))
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left <= right))
+                        )
                     }
                 }
             },
@@ -305,6 +330,13 @@ impl Evaluater {
         }        
 
         
+    }
+}
+
+fn bool_raw_to_type(raw: bool) -> BooleanType {
+    match raw {
+        true => BooleanType::True,
+        false => BooleanType::False
     }
 }
 

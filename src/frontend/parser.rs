@@ -1,4 +1,5 @@
 
+
 use super::{
     BinaryOp,
     ConditionalOp,
@@ -394,6 +395,15 @@ impl<'a> Parser<'a> {
                                 )
                             }
                         },
+                        Expr::Boolean(_) => {
+                            if ret_type != DataType::Boolean {
+                                return Err(
+                                    ParseError::InvalidDataType(
+                                        format!("Expected a boolean but got '{ret_type:#?}' instead!")
+                                    )
+                                )
+                            }
+                        }
                         _ => {},
                     }
 
@@ -615,6 +625,22 @@ impl<'a> Parser<'a> {
                     )
                 )
             },
+            TokenKind::Keyword(keyword) => {
+                match keyword {
+                    Keyword::Boolean(boolean_type) => {
+                        self.advance()?;
+                        Ok(Expr::Boolean(boolean_type))
+                    },
+                    _ => {
+                        let token = self.current()?.lexeme.to_string();
+                        return Err(
+                            ParseError::InvalidToken(
+                                format!("Expected an expression or a boolean, got {token} instead!")
+                            )
+                        )
+                    }
+                }
+            },
             /*
              * This is the start of other expression inclosed in () so we have to consume the (
              * and parse the expression again, which will not touch the closing parenthesis ),
@@ -669,8 +695,9 @@ impl<'a> Parser<'a> {
     fn parse_data_type(&mut self) -> Option<DataType> {        
         if let Ok(current) = self.current() {
             match current.kind {
-                TokenKind::DataType(_type) => {
-                    Some(_type)
+                TokenKind::Keyword(keyword) => match keyword {
+                    Keyword::DataType(_type) => Some(_type),
+                    _ => None
                 },
                 _ => None
             }

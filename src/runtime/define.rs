@@ -1,4 +1,4 @@
-use crate::frontend::{BinaryOp, ConditionalOp};
+use crate::frontend::{BinaryOp, BooleanType, ConditionalOp};
 
 
 pub(super) type Result<T> = std::result::Result<T, EvalError>;
@@ -7,7 +7,7 @@ pub(super) type Result<T> = std::result::Result<T, EvalError>;
 pub enum Value {
     Number(f64),
     String(String),
-    Boolean(bool),
+    Boolean(BooleanType),
     Null,
 }
 

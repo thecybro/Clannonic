@@ -3,6 +3,7 @@ use super::{
   Token,
   TokenKind,
   DataType,
+  BooleanType,
   Keyword,
   LexedOutput,
   Span,
@@ -138,10 +139,14 @@ impl<'a> Lexer<'a> {
             "else" => TokenKind::Keyword(Keyword::Else),
             "return" => TokenKind::Keyword(Keyword::Return),
 
-            "String" => TokenKind::DataType(DataType::String),
-            "int" => TokenKind::DataType(DataType::Integer),
-            "float" => TokenKind::DataType(DataType::Float),
-            "bool" => TokenKind::DataType(DataType::Boolean),
+            "String" => TokenKind::Keyword(Keyword::DataType(DataType::String)),
+            "int" => TokenKind::Keyword(Keyword::DataType(DataType::Integer)),
+            "float" => TokenKind::Keyword(Keyword::DataType(DataType::Float)),
+            "bool" => TokenKind::Keyword(Keyword::DataType(DataType::Boolean)),
+            
+            "true" => TokenKind::Keyword(Keyword::Boolean(BooleanType::True)),
+            "false" => TokenKind::Keyword(Keyword::Boolean(BooleanType::False)),
+
             _ => TokenKind::Identifier
         }
     }

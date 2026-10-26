@@ -5,7 +5,9 @@
 pub enum TokenKind {
     Identifier, 
 
-    DataType(DataType),
+    // This is the variant for the data type lexeme, like 1,2,3 for int
+    // which is not reserved by the language
+    DataType(DataType), 
     
     Plus,
     Minus,
@@ -66,6 +68,11 @@ pub enum DataType {
     Boolean, // bool
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BooleanType {
+    True,
+    False
+}
 
 /// The keywords to create statements
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,10 +81,15 @@ pub enum Keyword {
     For,
     While, // Done
     
-    Fn,
+    Fn, // done (partially)
     If, // Done
     Else,
-    Return,
+    Return, // done
+
+    // This is the variant for the reserved data type lexeme
+    // like int, String, bool, etc 
+    DataType(DataType),
+    Boolean(BooleanType),
 }
 
 
@@ -127,6 +139,7 @@ pub enum Expr {
     Number(f64), // it supports only f64 for now, will support more later
     Identifier(String),
     String(String),
+    Boolean(BooleanType), 
     Conditional {
         /// The reason we use Expr instead of Identifier
         /// because we might have to compare between
