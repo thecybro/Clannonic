@@ -16,7 +16,7 @@ mod runtime;
 
 use frontend::Lexer;
 use frontend::{Parser, ParseError};
-use interpreter::{Evaluater, EvalError};
+use interpreter::{Interpreter, EvalError};
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -38,7 +38,7 @@ impl From<EvalError> for Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// A simple glue for the lexer and parser (and evaluater/code generator later)
+/// A simple glue for the lexer and parser (and Interpreter/code generator later)
 /// which calls and takes return value from one and gives it to other
 pub fn run(source: &str) -> Result<()> {
     let tokens = Lexer::new(&source).get_lexed();
@@ -47,7 +47,7 @@ pub fn run(source: &str) -> Result<()> {
     let parsed = Parser::new(tokens).parse()?;
     // println!("{parsed:#?}");
     
-    let result = Evaluater::new().evaluate(&parsed);
+    let result = Interpreter::new().evaluate(&parsed);
 
     println!("{result:#?}");
 
