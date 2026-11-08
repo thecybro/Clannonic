@@ -522,11 +522,14 @@ impl<'a> Parser<'a> {
                     let identifier = self.advance()?.lexeme;
                     
                     let curr = self.current()?;
-                    if curr.kind != TokenKind::Col {
-                        let next = self.peek()?;
-                        match next.kind {
-                            TokenKind::DataType(_type) => {
-                                self.advance()?; // consume the colon
+                    if curr.kind == TokenKind::Col {
+                        self.advance()?; // consume the colon
+                        let current = self.current()?;
+                        
+                        match current.kind {
+                            TokenKind::Keyword(Keyword::DataType(_type)) => {
+                                self.advance()?; // consume the data type
+                                
                                 buffer.push(
                                     FunctionParamater {
                                         name: identifier.to_string(),
@@ -535,12 +538,12 @@ impl<'a> Parser<'a> {
                                 );
                                 // After we have gotten the data type, that's when we
                                 // need a comma, so accept the comma only then
-                                if self.peek()?.kind == TokenKind::Comma {
+                                if self.current()?.kind == TokenKind::Comma {
                                     self.advance()?;
                                 }
                             },
                             _ => {
-                                let lexeme = next.lexeme; 
+                                let lexeme = current.lexeme; 
                                 return Err(
                                     ParseError::TokenExpected(
                                         format!(
@@ -560,7 +563,7 @@ impl<'a> Parser<'a> {
                     }
                     
                 },
-                _ => break
+                _ => return Ok(())
             }
         }
 
@@ -686,7 +689,7 @@ impl<'a> Parser<'a> {
         }
         Ok(left)
     }
-
+    
     /*
      * This is the actual fundamental function that identifies what we have and returns
      * numbers or identifiers or expressions by pattern matching
@@ -724,71 +727,48 @@ impl<'a> Parser<'a> {
                 // println!("returned the identifier");
                 let identifier = self.advance()?.lexeme.to_string();
 
-                if self.current()?.kind == TokenKind::LParen {
-                    self.advance()?; // (
-                    let mut arguments: Vec<String> = Vec::new();
-
-                    // Get into the loop only if there are more tokens left;
-                    // If there no more tokens left, complain that a right paren was
-                    // expected, but got end of file.
-                    // 
-                    // If there are tokens left and then it would be consumed inside 
-                    // the loop, including the right paren
-                    while let Ok(current) = self.current() {
-                        match current.kind {
-                            TokenKind::Identifier => {
-                                arguments.push(self.advance()?.lexeme.to_string());
-                                // Consume the comma upon encountering it after the
-                                // identifiers so the loop doesn't complain upon
-                                // encountering them.
-                                // 
-                                // We consume comma only upon encountering the identifiers because
-                                // having a standalone comma in the function expression doesn't
-                                // make sense
-                                if self.current()?.kind == TokenKind::Comma {
-                                    self.advance()?;
-                                }
-                            },
-                            TokenKind::RParen => {
-                                self.advance()?; // )
-                                return Ok(
-                                    Expr::FunctionCall {
-                                        name: identifier,
-                                        arguments: arguments.into_boxed_slice()
-                                    }
-                                )
-                            },
-                            _ => {
-                                let lexeme = current.lexeme;
-                                return Err(
-                                    ParseError::TokenExpected(
-                                        format!("Expected a ')' or arguments but got {lexeme} instead")
-                                    )
-                                )
-                            }
-                        }
-                    }                  
-
-                    // If we reached this point, then it means it didn't enter the loop
-                    // which is caused by end of file
-                    return Err(
-                        ParseError::TokenExpected(
-                            "Expected a ')' before end of file!".to_string()
-                        )
-                    )
-                } else if self.current()?.kind == TokenKind::RParen {
-                    return Err(
-                        ParseError::TokenExpected(
-                            "Got a ')'.. Use '()' instead if you want to call a function!".to_string()
-                        )
-                    )
+                if self.current()?.kind != TokenKind::LParen {
+                    return Ok(Expr::Identifier(identifier));
                 }
                 
-                Ok(
-                    Expr::Identifier(
-                        identifier
-                    )
-                )
+                self.advance()?; // consume ')'
+
+                let mut arguments = Vec::new();
+
+                if self.current()?.kind == TokenKind::RParen {
+                    self.advance()?;
+
+                    return Ok(Expr::FunctionCall {
+                        name: identifier,
+                        arguments: arguments.into_boxed_slice()
+                    });
+                }
+
+                loop {
+                    arguments.push(self.parse_expression()?);
+
+                    match self.current()?.kind {
+                        TokenKind::Comma => {self.advance()?;},
+                        TokenKind::RParen => {
+                            self.advance()?;
+                            break;
+                        },
+                        _ => {
+                            let lex = self.current()?.lexeme.to_string();
+
+                            return Err(
+                                ParseError::TokenExpected
+                                    (
+                                        format!("Expected ',' or ')', got '{lex}'")
+                                    ));
+                        }
+                    }
+                }
+
+                Ok(Expr::FunctionCall {
+                    name: identifier,
+                    arguments: arguments.into_boxed_slice(),
+                })
             },
             TokenKind::Keyword(keyword) => {
                 match keyword {
@@ -826,26 +806,23 @@ impl<'a> Parser<'a> {
                         )
                     )
                 }
-                
+
                 let current = self.current()?;
-                match current.kind {
-                    TokenKind::RParen => {
-                        self.advance()?;
-                        return Ok(expr)
-                    },
-                    _ => {
-                        return Err(
-                            ParseError::TokenExpected(
-                            ")".to_string()
-                        ))
-                    }
+                if current.kind != TokenKind::RParen {
+                    let lex = current.lexeme;
+                    return Err(ParseError::TokenExpected(
+                               format!("Expected ')' but for '{lex} instead'")
+                        ));
                 }
+
+                self.advance()?;
+                Ok(expr)
             },
             _ => {
-                Err(
+                return Err(
                     ParseError::InvalidToken(
                     token.lexeme.to_string()
-                ))
+                ));
             }
         }
     }

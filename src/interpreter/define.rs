@@ -40,9 +40,18 @@ impl std::fmt::Display for Value {
                 if !params.is_empty() {
                     writeln!(f, "Parameter(s): ")?;
                     for param in params {
-                        writeln!(f, " - {}", param)?;
+                        write!(f, " - ")?;
+                        write!(f, " {}", param)?;
                     }
                 }
+
+                if let Some(ret_type) = &function.return_type {
+                    writeln!(f, "Return Type: {}", ret_type)?;
+                }
+
+                // if let Some(ret_expr) = &function.return_expr {
+                //     writeln!(f, "{}", ret_expr)?;
+                // }
                 Ok(())
             }
         }

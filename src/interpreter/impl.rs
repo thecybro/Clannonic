@@ -91,14 +91,14 @@ impl Interpreter {
             )
         }
 
-
-        // println!("Current self is\n{self:#?}");
-        // println!("Current env is: {env:#?}");
         // We dont travel to the parent nodes because we want to declare the identifier
         // locally inside the current environment only
         self.environments[env.0]
             .values
             .insert(name.clone(), value.clone());
+
+        println!("Following value has been stored in '{name}'");
+        println!("'{value}'\n");
         
         Ok(value)
         
@@ -470,7 +470,7 @@ impl Interpreter {
     /// This is the actual function that evaluates/executes the function
     /// when you call it by doing `let x = func_name()`
     /// 
-    fn eval_function_call_expression(&mut self, name: &str, arguments: &Box<[String]>) -> Result<Value> {
+    fn eval_function_call_expression(&mut self, name: &str, arguments: &Box<[Expr]>) -> Result<Value> {
         // We would have the entire function body stored in value
         // println!("From interpreter/impl.rs: line 457\n");
         let value = self.get_current(name)?;
@@ -492,7 +492,7 @@ impl Interpreter {
                 // We map each call site argument/identifier to the parameter the 
                 // called function expects; based on position
                 for (parameter, argument) in func.parameters.iter().zip(arguments.iter()) {
-                    let arg_val = self.get(caller_env, argument)?;
+                    let arg_val = self.eval_expression(argument)?;
 
                     self.define(
                         // We define the arguments and their values from the callers environment
@@ -503,17 +503,6 @@ impl Interpreter {
                     )?;
                 }
                 
-                // Get the value of the variables from the current scope
-                // Here, the arg.clone() is the caller site value, which the called function doesn't
-                // know about
-//                 for arg in arguments {
-//                     let _ = &self.define(
-//                         func_call_env, 
-//                         arg.clone(),
-//                         self.get(caller_env, arg)?
-//                     )?;
-// 
-//                 }
                 self.current = func_call_env;
 
                 let result = if let Some(return_type) = func.return_type {

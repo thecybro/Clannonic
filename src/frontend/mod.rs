@@ -223,7 +223,7 @@ pub enum Expr {
     /// ```
     FunctionCall {
         name: String,
-        arguments: Box<[String]>,
+        arguments: Box<[Expr]>,
     }
 }
 
@@ -275,8 +275,8 @@ pub struct FunctionParamater {
 
 impl std::fmt::Display for FunctionParamater {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{}", self.name)?;
-        writeln!(f, "{}", self.data_type)
+        write!(f, "{}:", self.name)?;
+        writeln!(f, " {}", self.data_type)
     }
 }
 
