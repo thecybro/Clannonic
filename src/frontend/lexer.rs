@@ -3,11 +3,24 @@ use super::{
   Token,
   TokenKind,
   DataType,
-  BooleanType,
+  BooleanVal,
   Keyword,
   LexedOutput,
   Span,
 };
+
+#[derive(Debug, Copy, Clone)]
+pub enum LexError {
+    InvalidCharacter {
+        character: char,
+        span: Span,
+    },
+    UnterminatedString {
+        span: Span
+    }
+}
+
+type Result<T> = std::result::Result<T, LexError>;
 
 pub struct Lexer<'a> {
     source: &'a str,
@@ -111,6 +124,17 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn is_next_whitespace(&self) -> bool {
+        while let Some(next) = self.peek() {
+            if next.is_whitespace() {
+                return true
+            } else {
+                return false
+            }
+        } 
+        return false
+    }
+
     /// Check if the current character is a valid identifier,
     /// If it is, keep consuming until you find what is not valid
     /// 
@@ -144,8 +168,8 @@ impl<'a> Lexer<'a> {
             "float" => TokenKind::Keyword(Keyword::DataType(DataType::Float)),
             "bool" => TokenKind::Keyword(Keyword::DataType(DataType::Boolean)),
             
-            "true" => TokenKind::Keyword(Keyword::Boolean(BooleanType::True)),
-            "false" => TokenKind::Keyword(Keyword::Boolean(BooleanType::False)),
+            "true" => TokenKind::BooleanLiteral(BooleanVal::True),
+            "false" => TokenKind::BooleanLiteral(BooleanVal::False),
 
             _ => TokenKind::Identifier
         }
@@ -153,38 +177,44 @@ impl<'a> Lexer<'a> {
     
     /// Keep consuming/advancing until we keep getting numbers and
     /// stop the moment we get anything else
-    fn consume_integer(&mut self) {
+    fn consume_number(&mut self) -> TokenKind {
+        let mut has_dot = false;
         while let Some(character) = self.current() {
             match character {
-                '0'..='9' => {
-                    self.advance()
-                },
+                '0'..='9' => self.advance(),
+                '.' => {
+                    if !has_dot {
+                        has_dot = true;
+                        self.advance();
+                    } else {
+                        // Stop consuming if we got second dot; it might be a range like for i in 1..2
+                        break;
+                    }
+                } 
                 _ => break
             }
         }
+
+        if has_dot {
+            TokenKind::FloatLiteral
+        } else {
+            TokenKind::IntegerLiteral
+        }
     }
 
-    /// Keep consuming until we find 1 double quote,
-    /// when we find it, whatever we consumed
-    /// will be part of one string
-    fn consume_string(&mut self, quote: char) {
-        // We are giving caller the authority to choose any
-        // quote they want, and this function will consume the
-        // current character if it matches that what we got in
-        // quote and keep consuming until we encounter another
-        // instance of that quote/character
-
-        if let Some(current) = self.current() {
-            if self.current() != Some(quote) {
-                panic!("The current character '{current}' is not a valid character to create a string")
-            }
-        }
-        self.advance(); 
-        
+    /// Keep consuming until we find the given quote
+    /// Here we dont consume the quotes because we trust the caller 
+    /// that they have already consumed the quotes and will consume after
+    /// we return
+    /// 
+    /// We consume just the stuff inside the quotes
+    /// 
+    /// Because if we were to consume it, we will put double double quotes
+    /// in the lexeme of the token (cuz it's a string slice)
+    fn consume_string(&mut self, quote: char, start: usize) -> Result<()> {
         while let Some(current) = self.current() {
             if current == quote {
-                self.advance();
-                return;
+                return Ok(());
             }
 
             self.advance();
@@ -192,7 +222,11 @@ impl<'a> Lexer<'a> {
 
         // We ideally wont reach in this line but if we somehow
         // reach here, some problem has occured
-        panic!("Unterminated string literal!")
+        return Err(LexError::UnterminatedString { 
+            span: Span {
+                start,
+                end: self.position
+        }})
     }
     
     /// Keep consuming until we keep getting slashes, this will allow the which_slash()
@@ -220,13 +254,13 @@ impl<'a> Lexer<'a> {
     /// Its callers dont have to think of whitespaces, raw characters or anything at all
     /// All they care about it that whenever they call it, they will get a valid token
     /// Or panic if the next character is an invalid token
-    fn next_token(&mut self) -> Token<'a> {  
+    fn next_token(&mut self) -> Result<Token<'a>> {  
         self.skip_whitespace();
         
         let start = self.position;
 
         let Some(character) = self.current() else {
-            return self.token(TokenKind::Eof, start)
+            return Ok(self.token(TokenKind::Eof, start))
         };
 
         match character {
@@ -235,15 +269,15 @@ impl<'a> Lexer<'a> {
                 // letters or underscore and it's fine if there are numbers in between
                 // them as long as an identifier doesn't START with numbers
                 self.consume_identifier();
-                self.token(
+                Ok(self.token(
                     // either get a specific keyword or one identifier invariant
                     self.keyword_or_identifier(start),
                     start
-                )
+                ))
             },
             '0'..='9' => {
-                self.consume_integer();
-                self.token(TokenKind::DataType(DataType::Integer), start)
+                let kind = self.consume_number();
+                Ok(self.token(kind, start))
             },
             '=' => {
                 if let Some(next) = self.peek() {
@@ -255,14 +289,14 @@ impl<'a> Lexer<'a> {
                     if next == '=' {
                         self.advance();
                         self.advance();
-                        self.token(TokenKind::EqualsEquals, start)
+                        Ok(self.token(TokenKind::EqualsEquals, start))
                     } else {
                         self.advance();
-                        self.token(TokenKind::Equals, start)
+                        Ok(self.token(TokenKind::Equals, start))
                     }
                 } else {
                     self.advance();
-                    self.token(TokenKind::Equals, start)
+                    Ok(self.token(TokenKind::Equals, start))
                 }
             },
             '>' => {
@@ -272,14 +306,14 @@ impl<'a> Lexer<'a> {
                     if next == '=' {
                         self.advance();
                         self.advance();
-                        self.token(TokenKind::GreaterOrEquals, start)
+                        Ok(self.token(TokenKind::GreaterOrEquals, start))
                     } else {
                         self.advance();
-                        self.token(TokenKind::GreaterThan, start)
+                        Ok(self.token(TokenKind::GreaterThan, start))
                     }
                 } else {
                     self.advance();
-                    self.token(TokenKind::GreaterThan, start)
+                    Ok(self.token(TokenKind::GreaterThan, start))
                 }
             },
             '<' => {
@@ -290,103 +324,121 @@ impl<'a> Lexer<'a> {
                     if next == '=' {
                         self.advance();
                         self.advance();
-                        self.token(TokenKind::LessOrEquals, start)
+                        Ok(self.token(TokenKind::LessOrEquals, start))
                     } else {
                         self.advance();
-                        self.token(TokenKind::LessThan, start)
+                        Ok(self.token(TokenKind::LessThan, start))
                     }
                 } else {
                     self.advance();
-                    self.token(TokenKind::LessThan, start)
+                    Ok(self.token(TokenKind::LessThan, start))
                 }
             }
             ')' => {
                 self.advance();
-                self.token(TokenKind::RParen, start)
+                Ok(self.token(TokenKind::RParen, start))
             },
             '(' => {
                 self.advance();
-                self.token(TokenKind::LParen, start)
+                Ok(self.token(TokenKind::LParen, start))
             },
             '{' => {
                 self.advance();
-                self.token(TokenKind::LBrace, start)
+                Ok(self.token(TokenKind::LBrace, start))
             },
             '}' => {
                 self.advance();
-                self.token(TokenKind::RBrace, start)
+                Ok(self.token(TokenKind::RBrace, start))
             },
             ';' => {
                 self.advance();
-                self.token(TokenKind::SemCol, start)
+                Ok(self.token(TokenKind::SemCol, start))
             },
             ':' => {
                 self.advance();
-                self.token(TokenKind::Col, start)
+                Ok(self.token(TokenKind::Col, start))
             },
             ',' => {
                 self.advance();
-                self.token(TokenKind::Comma, start)
+                Ok(self.token(TokenKind::Comma, start))
             },
             '.' => {
                 self.advance();
-                self.token(TokenKind::Dot, start)
+                Ok(self.token(TokenKind::Dot, start))
             },
             '!' => {
                 if let Some(next) = self.peek() {
                     if next == '=' {
                         self.advance();
                         self.advance();
-                        self.token(TokenKind::NotEquals, start)
+                        Ok(self.token(TokenKind::NotEquals, start))
                     } else {
                         self.advance();
-                        self.token(TokenKind::Not, start)
+                        Ok(self.token(TokenKind::Not, start))
                     }
                 } else {
                     self.advance();
-                    self.token(TokenKind::Not, start)
+                    Ok(self.token(TokenKind::Not, start))
                 }
             },
             '"' => {
-                self.consume_string('"');
-                self.token(TokenKind::DataType(DataType::String), start)
+                // Consume the detected double quote and let it consume
+                self.advance();
+                self.consume_string('"', start)?;
+                // It returns after it encountes that quote, so consume
+                // that last quote
+                // 
+                // This way, we just store the string inside the quotes, not
+                // the quotes themselves
+                self.advance();
+                Ok(self.token(TokenKind::StringLiteral, start))
             },
             '\'' => {
-                self.consume_string('\'');
-                // self.token(TokenKind::SQuote, start)
-                self.token(TokenKind::DataType(DataType::String), start)
+                self.advance();
+                self.consume_string('\'', start)?;
+                self.advance();
+                Ok(self.token(TokenKind::StringLiteral, start))
             },
             '+' => {
-                self.advance();
-                self.token(TokenKind::Plus, start)
-            },
-            '-' => {
-                if let Some(next) = self.peek() {
-                    if next == '>' {
-                        self.advance();
-                        self.advance();
-                        self.token(TokenKind::Arrow, start)
-                    } else {
-                        self.advance();
-                        self.token(TokenKind::Minus, start)
-                    }
-                } else {
+                if self.peek() == Some('+'){
                     self.advance();
-                    self.token(TokenKind::Minus, start)
+                    self.advance();
+                    return Ok(self.token(TokenKind::PlusPlus, start))
                 }
+                self.advance();
+                Ok(self.token(TokenKind::Plus, start))
+            },
+            '-' => {                
+                if self.peek() == Some('-') {
+                    self.advance();
+                    self.advance();
+                    return Ok(self.token(TokenKind::MinusMinus, start))
+                } else if self.peek() == Some('>') {
+                    self.advance();
+                    self.advance();
+                    return Ok(self.token(TokenKind::Arrow, start))
+                }
+                self.advance();
+                Ok(self.token(TokenKind::Minus, start))
             },
             '*' => {
                 self.advance();
-                self.token(TokenKind::Star, start)
+                Ok(self.token(TokenKind::Star, start))
             },
             '/' => {
               self.consume_slash();
-                self.token(
-                    self.which_slash(start),
-                    start
-                )  
+                Ok(self.token(
+                        self.which_slash(start),
+                        start
+                )) 
             },
-            _ => panic!("Invalid token: {character}")
+            _ => return Err(LexError::InvalidCharacter { 
+                character, 
+                span: Span {
+                    start,
+                    end: self.position
+                }
+            })
         }
         
     }
@@ -411,14 +463,14 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = Token<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let token = self.next_token();
-
-        // The .next_token() returns Eof, we simply give None
-        // because that's what iterators do
-        if token.kind == TokenKind::Eof {
-            None
+        if let Ok(tk) = self.next_token() {
+            if tk.kind == TokenKind::Eof {
+                None
+            } else {
+                Some(tk)
+            }
         } else {
-            Some(token)
+            None
         }
     }
 }

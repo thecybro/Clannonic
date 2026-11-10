@@ -13,27 +13,33 @@ pub use parser::*;
 pub enum TokenKind {
     Identifier, 
 
-    // This is the variant for the data type lexeme, like 1,2,3 for int
-    // which is not reserved by the language
-    DataType(DataType), 
+    IntegerLiteral,
+    FloatLiteral,
+    StringLiteral,
+    BooleanLiteral(BooleanVal), // This is for the boolean values; not boolean data type
+
+    Keyword(Keyword),
     
     Plus,
     Minus,
     Star,
     Slash,
 
-    Arrow, // -> Used to indicate function return value
+    PlusPlus,
+    MinusMinus,
+    
+    Arrow, // -> Used to indicate function return type
     
     DSlash, // //
     TSlash, // ///
     MSlash, // Any number of slashes above 3
         
-    Equals,
-    EqualsEquals,
+    Equals, // =
+    EqualsEquals, // ==
 
-    GreaterThan,
-    LessThan,
-    Not,
+    GreaterThan, // >
+    LessThan, // <
+    Not, // !
     
     NotEquals, // !=
     
@@ -51,15 +57,13 @@ pub enum TokenKind {
     Comma, // ,
     Dot, // .
 
-    Keyword(Keyword),
-    
     Eof,
 }
 
 
 /// The data types this language currently supports
 /// Usage example: 
-/// ```
+/// ```no_run
 /// fn main() -> int {
 ///     // do something here
 /// }
@@ -89,7 +93,7 @@ impl std::fmt::Display for DataType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BooleanType {
+pub enum BooleanVal {
     True,
     False
 }
@@ -101,8 +105,6 @@ pub enum Keyword {
     Let, // Done
     For,
     While, // Done
-
-    // Global, // used to define variables globally
     
     Fn, // done (partially)
     If, // Done
@@ -112,7 +114,6 @@ pub enum Keyword {
     // This is the variant for the reserved data type lexeme
     // like int, String, bool, etc 
     DataType(DataType),
-    Boolean(BooleanType), // This is for the boolean values; not boolean data type
 }
 
 
@@ -157,20 +158,37 @@ pub enum BinaryOp {
     Divide,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum UnaryOp {
+    Plus,
+    Minus,
+    Increment,
+    Decrement,
+    Not,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryFixity {
+    Prefix,
+    Postfix,
+}
+
 
 /// The types of expressions supported
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum Expr {
-    Number(f64), // it supports only f64 for now, will support more later
+    Float(f64), 
+    Integer(i64),
     Identifier(String),
     String(String),
-    Boolean(BooleanType), 
+    Boolean(BooleanVal), 
     Conditional {
         /// The reason we use Expr instead of Identifier
         /// because we might have to compare between
         /// any 2 expressions as well, like 
-        /// ```
+        /// ```no_run
         /// (a + b) >= (c + d)
         /// ```
         /// 
@@ -192,7 +210,7 @@ pub enum Expr {
         /// arithmetic operation chain.
         /// 
         /// For example:
-        /// ```
+        /// ```no_run
         /// // In the case of left/right: TokenKind
         /// let x = a + b // valid
         /// let x = a + b - c // invalid
@@ -215,7 +233,12 @@ pub enum Expr {
         operator: BinaryOp,
         right: Box<Expr>,
     },
-    /// A function expression means using a function that has been implemented
+    Unary {
+        operator: UnaryOp,
+        operand: Box<Expr>,
+        fixity: UnaryFixity,
+    },
+    /// A function call expression means using a function that has been implemented
     /// For example:
     /// ```no run
     /// 
@@ -260,20 +283,22 @@ pub enum Stmt {
     /// ```
     Fn {
         name: String,
-        parameters: Box<[FunctionParamater]>,
+        parameters: Box<[FunctionParameter]>,
         return_type: Option<DataType>,
         return_expr: Option<Expr>,
         body: Box<[Stmt]>
-    }
+    },
+    Return(Expr),
+    Expression(Expr),
 }
 
 #[derive(Debug,  Clone, PartialEq)]
-pub struct FunctionParamater {
+pub struct FunctionParameter {
     pub name: String,
     pub data_type: DataType,
 }
 
-impl std::fmt::Display for FunctionParamater {
+impl std::fmt::Display for FunctionParameter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:", self.name)?;
         writeln!(f, " {}", self.data_type)

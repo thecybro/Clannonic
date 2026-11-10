@@ -42,7 +42,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// which calls and takes return value from one and gives it to other
 pub fn run(source: &str) -> Result<()> {
     let tokens = Lexer::new(&source).get_lexed();
-    // println!("{tokens:#?}");
+    println!("{tokens:#?}");
 
     let parsed = Parser::new(tokens).parse()?;
     // println!("{parsed:#?}");

@@ -1,10 +1,11 @@
 
-
 use super::{
     BinaryOp,
     ConditionalOp,
+    UnaryOp,
+    UnaryFixity,
     Expr,
-    FunctionParamater,
+    FunctionParameter,
     Keyword,
     LexedOutput,
     Program,
@@ -12,6 +13,7 @@ use super::{
     Token,
     TokenKind,
     DataType,
+    BooleanVal,
 };
 
 #[derive(Debug)]
@@ -29,10 +31,12 @@ pub enum ParseError {
     TokenExpected(String),
     NotAKeyword(String),
     KeywordNotSupported(String),
+    UnsupportedConditionalStatement(String),
     // UnsupportedKeyword(String),
+    StringToF64,
     StringToI64,
 }
-// .keyword()
+
 type Result<T> = std::result::Result<T, ParseError>;
 
 /// Public methods for the parser
@@ -95,77 +99,47 @@ impl<'a> Parser<'a> {
     /// like for example in the following code, if our position is 0, it will parse the
     /// let statement and then return, it won't parse the if statement
     /// 
-    /// ```
+    /// ```no_run
     /// let x = a + b
     /// if x > 10 {
     ///     // do something
     /// }
     /// ```
     fn parse_statement(&mut self) -> Result<Stmt> {   
-        // see what keyword we have here and call the appropriate
-        // parser
-        match self.keyword()? {
-            Keyword::Let => {
-                self.parse_let_stmt()
-            },
-            Keyword::If => {
-                self.parse_if_stmt()
-            },
-            Keyword::While => {
-                self.parse_while_stmt()
-            },
-            Keyword::Fn => {
-                self.parse_function_stmt()
+        match self.current()?.kind {
+            TokenKind::Keyword(Keyword::Let) => self.parse_let_stmt(),
+            TokenKind::Keyword(Keyword::If) => self.parse_if_stmt(),
+            TokenKind::Keyword(Keyword::While) => self.parse_while_stmt(),
+            TokenKind::Keyword(Keyword::Fn) => self.parse_function_stmt(),
+            TokenKind::Keyword(Keyword::Return) => self.parse_return_stmt(),
+            
+            TokenKind::Identifier => {
+                if self.peek_kind() == Some(TokenKind::Equals) {
+                    println!("Directing to assignment stmt parser");
+                    self.parse_assign_stmt()
+                } else {
+                    println!("Directing to expression parser");
+                    Ok(Stmt::Expression(self.parse_expression()?))
+                }
             },
             _ => {
-                let current = self.current()?;
-
-                // User wants to assign to the identifier that has probably already
-                // been declared above
-                if current.kind == TokenKind::Identifier {
-                    self.parse_assign_stmt()?;
-                }
-                
-                return Err(
-                    ParseError::KeywordNotSupported(
-                        self.current()?.lexeme.to_string()
-                    )
-                )
+                let curr_lexeme = self.curr_lexeme()?;
+                return Err(ParseError::KeywordNotSupported(
+                    format!("'{curr_lexeme}' is not a supported keyword!")
+                ))
             }
         }
     }
 
     /// Parse the statement if it starts with let
     fn parse_let_stmt(&mut self) -> Result<Stmt> {  
-        self.advance()?; // consume the let token
+        // self.advance()?; // consume the let token
+        self.expect_keyword(Keyword::Let)?;
+        
+        let identifier = self.expect_identifier()?;
 
-        // We gotta make sure that after let, we have an identifier
-        // like 'let x'
-        if self.current()?.kind != TokenKind::Identifier {
-            return Err(
-                ParseError::InvalidToken(
-                    self.current()?.lexeme.to_string()
-                )
-            )
-        }
+        self.expect(TokenKind::Equals)?;
 
-        // Consume the identifier we confirmed
-        let identifier = self.advance()?.lexeme.to_string();
-
-        // After identifier, we need to have equals token
-        if self.current()?.kind != TokenKind::Equals {
-            return Err(
-                ParseError::InvalidToken(
-                    self.current()?.lexeme.to_string()
-                )
-            )
-        }
-
-        // We confirmed it's an equals, so consume it
-        self.advance()?;
-
-        // Let statement contains expression like 'a+b' after = sign,
-        // we parse that expression
         let expression = self.parse_expression()?;
 
         Ok(Stmt::Let {
@@ -178,17 +152,9 @@ impl<'a> Parser<'a> {
     /// Parse the statement if it starts with an identifier
     /// which is likely to be an assignment statement
     fn parse_assign_stmt(&mut self) -> Result<Stmt> {
-        let identifier = self.advance()?.lexeme.to_string(); // Consume the identifier
+        let identifier = self.expect_identifier()?; // Consume the identifier
 
-        if self.current()?.kind != TokenKind::Equals {
-            return Err(
-                ParseError::TokenExpected(
-                    format!("Expected a '=' after the identifier '{identifier}'")
-                )
-            )
-        }
-
-        self.advance()?; // It's a =, so consume it
+        self.expect(TokenKind::Equals)?;
 
         let expression = self.parse_expression()?;
 
@@ -199,119 +165,24 @@ impl<'a> Parser<'a> {
             }
         )
     }
+
+    /// If and while statements have same 2 things: a conditional expression and
+    /// a code block, so they can be parsed in the same way
     
     /// Parse the section of the tokens that come under the if statement
     fn parse_if_stmt(&mut self) -> Result<Stmt> {
-        self.advance()?; // consume the if token
-
-        // We would have an expression after if, so start the expression 
-        // parsing, which will call either binary parsers or conditional
-        // parsers based on what the expression is like
-        let condition = self.parse_expression()?;
-
-        // We gotta make sure we have a { after the expression 
-        if self.current()?.kind != TokenKind::LBrace {
-            return Err(
-                ParseError::TokenExpected(
-                    "Expected {".to_string()
-                )
-            )
-        }
-
-        // Confirmed an LBrace, so consume it
-        self.advance()?;
-
-        let mut body = vec![];
-
-        // Keep consuming the tokens until we find a closing brace which will
-        // indicate the end of the if statement
-        loop {
-            if self.is_at_end() {
-                return Err(
-                    ParseError::TokenExpected(
-                        "}` expected before end of the file".to_string()
-                    )
-                );
-            }
-
-            // Got the }, so consume it so we finish the if statement and then break out of the loop
-            if self.current()?.kind == TokenKind::RBrace {
-                self.advance()?; // consume the }
-                break;
-            }
-
-            // We have neither reached the end of the if statement or end of file, so keep parsing
-            body.push(self.parse_statement()?)
-        }
-
-        Ok(
-            Stmt::If {
-                condition,
-                body: body.into_boxed_slice(),
-            }
-        )
+        self.parse_condition_stmt(Keyword::If)
     }
 
     /// Parse the section that the while loop should cover 
     fn parse_while_stmt(&mut self) -> Result<Stmt> {
-        self.advance()?; // consume the while token
-
-        // We should have an expression after while, so parse the condition
-        let condition = self.parse_expression()?;
-
-        // We need a { after the condition so make sure we have it
-        if self.current()?.kind != TokenKind::LBrace {
-            let lexeme = self.current()?.lexeme.to_string();
-            return Err(
-                ParseError::TokenExpected(
-                    format!("Expected '{{' but got '{lexeme}' instead!")
-                )
-            )
-        }
-
-        // Confirmed that we have a {, so consume it
-        self.advance()?;
-        
-        let mut body = vec![];
-        
-        loop {
-            // A closing brace is a must to terminate the while loop
-            if self.is_at_end() {
-                return Err(
-                    ParseError::TokenExpected(
-                        "Expected '}' before end of file!".to_string()
-                    )
-                )
-            }
-
-            // Got the right brace, so consume and break out of the loop now
-            if self.current()?.kind == TokenKind::RBrace {
-                self.advance()?;
-                break
-            }
-
-            // We have neither reached Eof, nor gotten }, so keep going
-            body.push(self.parse_statement()?)
-        }
-
-        Ok(
-            Stmt::While {
-                condition,
-                body: body.into_boxed_slice()
-            }
-        )
-
+        self.parse_condition_stmt(Keyword::While)
     }
 
     /// Function parser
-    /// 
-    /// > This doesn't support arguments yet, nor can you actually use the `return` keyword yet,
-    /// > so the return indication is useless
-    /// 
     /// A function statement is the declaration/implementation of a function; not the call to it.
     /// For example (statement)
     /// ```no_run
-    /// 
     /// fn add_one(a: int) -> int {
     ///     return a + 1
     /// }
@@ -323,171 +194,51 @@ impl<'a> Parser<'a> {
     /// let x = add_one(1) 
     /// ```
     fn parse_function_stmt(&mut self) -> Result<Stmt> {
-        self.advance()?; // Consume the fn token
+        self.expect_keyword(Keyword::Fn)?;
 
-        // This check is not needed because we are already checking if we have an
-        // identifier or not in the block below
-        // if self.current()?.kind != TokenKind::Identifier {}
-
+        let name = self.expect_identifier()?;
         
-        let name = if let Ok(current) = self.current() {
-            let curr = current.lexeme.to_string();
-            
-            if current.kind != TokenKind::Identifier {
-                return Err(
-                    ParseError::TokenExpected(
-                        format!("Expected an identifier but found '{curr}' instead!")
-                    )
-                )
-            }
+        self.expect(TokenKind::LParen)?;
 
-            self.advance()?;
+        let parameters = self.parse_comma_separated(|parser| {
+            let name = parser.expect_identifier()?;
+            parser.expect(TokenKind::Col)?;
 
-            curr
-        } else {
-            // We have no more tokens left
-            return Err(
-                ParseError::TokenExpected(
-                    format!("Expected an identifier before end of file!")
-                )
-            )
-        };
+            let data_type = parser.expect_data_type()?;
+
+            Ok(FunctionParameter {
+                name,
+                data_type
+            })
+        })?.into_boxed_slice();
         
-        if self.current()?.kind != TokenKind::LParen {
-            let token = self.current()?.lexeme;
-            return Err(
-                ParseError::TokenExpected(
-                    format!("Expected a '(', found '{token}'!")
-                )
-            )
-        }
-
-        self.advance()?; // consume the left parenthesis (
-
-        let mut buffer: Vec<FunctionParamater> = Vec::new();
-
-        // This method will fill up the buffer
-        self.parse_function_parameters(&mut buffer)?;
-
-        let parameters = buffer.into_boxed_slice();
-
-        if self.is_at_end() {
-            return Err(
-                ParseError::TokenExpected(
-                    format!("Expected a ')', before end of file!")
-                )
-            )
+        let mut return_type = None;        
+        if self.take_if(TokenKind::Arrow) {
+            return_type = Some(self.expect_data_type()?);
         }
         
-        if self.current()?.kind != TokenKind::RParen {
-            let token = self.current()?.lexeme;
-            return Err(
-                ParseError::InvalidToken(
-                    format!("Expected a ')', found '{token}'!")
-                )
-            )
-        }
+        self.expect(TokenKind::LBrace)?;
 
-        self.advance()?; // consume the right parenthesis )
-
-        if self.current()?.kind != TokenKind::Arrow {
-            let token = self.current()?.lexeme;
-            return Err(
-                ParseError::TokenExpected(
-                    format!("Expected a '->' after function declaration, found '{token}'!")
-                )
-            )
-        }
-
-        self.advance()?; // consume the arrow
-
-        let return_type = self.parse_data_type();
-
-        // If we didn't get None then it means there is 
-        // a return type, so consume it, if not, we dont 
-        // try to do so
-        if return_type != None {
-            self.advance()?;
-        }
-        
-        if self.current()?.kind != TokenKind::LBrace {
-            let token = self.current()?.lexeme;
-            return Err(
-                ParseError::TokenExpected(
-                    format!("Expected a '{{', found '{token}'!")
-                )
-            )
-        }
-
-        self.advance()?; // consume the left brace {
-
-        let mut body = Vec::new();
         let mut return_expr = None;
-        
-        loop {
-            if let Some(ret_type) = return_type {
-                if self.current()?.kind == TokenKind::Keyword(Keyword::Return) {
-                    
-                    self.advance()?;
-                    let expr_result = self.parse_expression()?;
+        let mut body = Vec::new();
 
-                    // It's obvious in the case of number/integer and string
-                    // 
-                    // But which DataType do we need if we have an identifier
-                    // expression?
-                    // 
-                    // Since identifier is not a data type, and same with 
-                    match expr_result {
-                        Expr::Number(_) => {
-                            if !matches!(ret_type, DataType::Integer | DataType::Float) {
-                                return Err(
-                                    ParseError::InvalidDataType(
-                                        format!("Expected an integer or a float but got '{ret_type:#?}' instead!")
-                                    )
-                                )
-                            }
-                        },
-                        Expr::String(_) => {
-                            if ret_type != DataType::String {
-                                return Err(
-                                    ParseError::InvalidDataType(
-                                        format!("Expected a string but got '{ret_type:#?}' instead!")
-                                    )
-                                )
-                            }
-                        },
-                        Expr::Boolean(_) => {
-                            if ret_type != DataType::Boolean {
-                                return Err(
-                                    ParseError::InvalidDataType(
-                                        format!("Expected a boolean but got '{ret_type:#?}' instead!")
-                                    )
-                                )
-                            }
-                        }
-                        _ => {},
-                    }
-
-                    return_expr = Some(expr_result)
-                }
-            }
-            
+        while !self.at(TokenKind::RBrace) {
             if self.is_at_end() {
-                return Err(
-                    ParseError::TokenExpected(
-                        "Expected a '}' before end of the file!".to_string()
-                    )
-                )
+                return Err(ParseError::TokenExpected(
+                    "Expected '}' before end of file!".to_string()
+                ));
             }
 
-            if self.current()?.kind == TokenKind::RBrace {
-                self.advance()?;
-                break
+            if self.take_if(TokenKind::Keyword(Keyword::Return)) {
+                return_expr = Some(self.parse_expression()?);
+                continue;
             }
 
-            body.push(self.parse_statement()?)
+            body.push(self.parse_statement()?);
         }
 
+        self.expect(TokenKind::RBrace)?;
+        
         Ok(
             Stmt::Fn {
                 name,
@@ -499,75 +250,12 @@ impl<'a> Parser<'a> {
         )
     }
 
-    /// This method parses the parameters we get inside the function definition parens
-    /// For example:
-    /// ```no_run
-    /// fn add (param1: int, param2: in2) -> int {
-    ///     return param1 + param2
-    /// }
-    /// ```
-    /// Here, param1 and param2 are the parameters and this method handles everything
-    /// between the 2 parentheses
-    fn parse_function_parameters(&mut self, buffer: &mut Vec<FunctionParamater>) -> Result<()> {
-        // We dont want any possible lingering stuff into the buffer,
-        // so we clear it to be safe.
-        // Though I dont think how something could get in here
-        buffer.clear(); 
-        while let Ok(current) = self.current() {
-            match current.kind {
-                TokenKind::Identifier => {
-                    // This will automatically consume the identifier and return it,
-                    // so we can use it directly instead of ignoring the value it returns
-                    // and extracting that ourselves
-                    let identifier = self.advance()?.lexeme;
-                    
-                    let curr = self.current()?;
-                    if curr.kind == TokenKind::Col {
-                        self.advance()?; // consume the colon
-                        let current = self.current()?;
-                        
-                        match current.kind {
-                            TokenKind::Keyword(Keyword::DataType(_type)) => {
-                                self.advance()?; // consume the data type
-                                
-                                buffer.push(
-                                    FunctionParamater {
-                                        name: identifier.to_string(),
-                                        data_type: _type
-                                    }
-                                );
-                                // After we have gotten the data type, that's when we
-                                // need a comma, so accept the comma only then
-                                if self.current()?.kind == TokenKind::Comma {
-                                    self.advance()?;
-                                }
-                            },
-                            _ => {
-                                let lexeme = current.lexeme; 
-                                return Err(
-                                    ParseError::TokenExpected(
-                                        format!(
-                                            "Expected a data type after the colon ':' but got {lexeme} instead!"
-                                        )
-                                    )
-                                )
-                            }
-                        }
-                    } else {
-                        let lexeme = curr.lexeme;
-                        return Err(
-                            ParseError::TokenExpected(
-                                format!("Expected a colon but for '{lexeme}' instead!")
-                            )
-                        )
-                    }
-                    
-                },
-                _ => return Ok(())
-            }
-        }
+    fn parse_return_stmt(&mut self) -> Result<Stmt> {
+        self.expect(TokenKind::Keyword(Keyword::Return))?;
 
-        Ok(())
+        Ok(
+            Stmt::Return(self.parse_expression()?)
+        )
     }
 }
 
@@ -662,10 +350,10 @@ impl<'a> Parser<'a> {
 
     fn parse_multiplication(&mut self) -> Result<Expr> {
         /*
-         * Call parse_primary() to get the numbers/identifiers
+         * Call parse_unary() to get the numbers/identifiers
          * or a binary (either containing numbers/identifiers or other binaries)
          */
-        let mut left = self.parse_primary()?;
+        let mut left = self.parse_unary()?;
 
         while let Ok(token) = self.current() {
             let operator = match token.kind {
@@ -689,6 +377,43 @@ impl<'a> Parser<'a> {
         }
         Ok(left)
     }
+
+    fn parse_unary(&mut self) -> Result<Expr> {
+        if let Some(operator) = self.current_prefix_operator() {
+            self.advance()?;
+            
+            let operand = self.parse_unary()?;
+            return Ok(Expr::Unary {
+                operator,
+                operand: Box::new(operand),
+                fixity: UnaryFixity::Prefix
+            });
+        }
+        self.parse_postfix()
+    }
+
+
+    fn parse_postfix(&mut self) -> Result<Expr> {
+        let mut operand = self.parse_primary()?;
+
+        while let Some(current) = self.current_kind() {
+            let operator = match current {
+                TokenKind::PlusPlus => UnaryOp::Increment,
+                TokenKind::MinusMinus => UnaryOp::Decrement,
+                _ => break
+            };
+
+            self.advance()?;
+
+            operand = Expr::Unary {
+                operator,
+                operand: Box::new(operand),
+                fixity: UnaryFixity::Postfix
+            };
+        }
+
+        Ok(operand)
+    }
     
     /*
      * This is the actual fundamental function that identifies what we have and returns
@@ -697,94 +422,54 @@ impl<'a> Parser<'a> {
      */
     fn parse_primary(&mut self) -> Result<Expr> {
         let token = self.current()?;
-
-        // println!("Current: {:#?}", token);
             
         match token.kind {
-            TokenKind::DataType(data_type) => match data_type {
-                DataType::Integer => {
-                    if let Some(float) = parse_to_f64(token.lexeme) {
-                        self.advance()?;
-                        Ok(Expr::Number(float))
-                    } else {
-                        Err(ParseError::StringToI64)
-                    }
-                },
-                DataType::String => {
-                    Ok(
-                        Expr::String(
-                            self.advance()?.lexeme.to_string()
-                        )
-                    ) 
-                },
-                _ => return Err(
-                    ParseError::InvalidDataType(
-                        self.current()?.lexeme.to_string()
-                    )
-                )
+            TokenKind::IntegerLiteral => {
+                if let Some(integer) = parse_to_i64(token.lexeme) {
+                    self.advance()?;
+                    Ok(Expr::Integer(integer))
+                } else {
+                    Err(ParseError::StringToI64)
+                }
+            },
+            TokenKind::FloatLiteral => {
+                if let Some(float) = parse_to_f64(token.lexeme) {
+                    self.advance()?;
+                    Ok(Expr::Float(float))
+                } else {
+                    Err(ParseError::StringToF64)
+                }
+            },
+            TokenKind::StringLiteral => {
+                Ok(Expr::String(self.advance()?.lexeme.to_string()))
+            },
+            TokenKind::BooleanLiteral(boolean_val) => {
+                self.advance()?;
+                Ok(Expr::Boolean(boolean_val))
             },
             TokenKind::Identifier => {
-                // println!("returned the identifier");
                 let identifier = self.advance()?.lexeme.to_string();
 
-                if self.current()?.kind != TokenKind::LParen {
+                if self.is_at_end() || self.current()?.kind != TokenKind::LParen {
                     return Ok(Expr::Identifier(identifier));
                 }
                 
-                self.advance()?; // consume ')'
+                self.advance()?; // consume '('
 
-                let mut arguments = Vec::new();
-
-                if self.current()?.kind == TokenKind::RParen {
-                    self.advance()?;
-
+                let arguments = Vec::new();
+                if self.take_if(TokenKind::RParen) {
                     return Ok(Expr::FunctionCall {
                         name: identifier,
                         arguments: arguments.into_boxed_slice()
                     });
                 }
-
-                loop {
-                    arguments.push(self.parse_expression()?);
-
-                    match self.current()?.kind {
-                        TokenKind::Comma => {self.advance()?;},
-                        TokenKind::RParen => {
-                            self.advance()?;
-                            break;
-                        },
-                        _ => {
-                            let lex = self.current()?.lexeme.to_string();
-
-                            return Err(
-                                ParseError::TokenExpected
-                                    (
-                                        format!("Expected ',' or ')', got '{lex}'")
-                                    ));
-                        }
-                    }
-                }
-
+                
                 Ok(Expr::FunctionCall {
                     name: identifier,
-                    arguments: arguments.into_boxed_slice(),
+                    arguments: self.parse_comma_separated(|parser| {
+                        Ok(parser.parse_expression()?)
+                    })?.into_boxed_slice()
                 })
-            },
-            TokenKind::Keyword(keyword) => {
-                match keyword {
-                    Keyword::Boolean(boolean_type) => {
-                        self.advance()?;
-                        Ok(Expr::Boolean(boolean_type))
-                    },
-                    _ => {
-                        let token = self.current()?.lexeme.to_string();
-                        return Err(
-                            ParseError::InvalidToken(
-                                format!("Expected an expression or a boolean, got {token} instead!")
-                            )
-                        )
-                    }
-                }
             },
             /*
              * This is the start of other expression inclosed in () so we have to consume the (
@@ -797,6 +482,7 @@ impl<'a> Parser<'a> {
              */
             TokenKind::LParen => {
                 self.advance()?;
+
                 let expr = self.parse_expression()?; // Where recursion happens
 
                 if self.is_at_end() {
@@ -806,15 +492,15 @@ impl<'a> Parser<'a> {
                         )
                     )
                 }
-
+ 
                 let current = self.current()?;
                 if current.kind != TokenKind::RParen {
                     let lex = current.lexeme;
                     return Err(ParseError::TokenExpected(
-                               format!("Expected ')' but for '{lex} instead'")
+                               format!("Expected ')' but got '{lex} instead'")
                         ));
                 }
-
+ 
                 self.advance()?;
                 Ok(expr)
             },
@@ -828,52 +514,153 @@ impl<'a> Parser<'a> {
     }
 }
 
-/// Private parsing methods for data types
+/// Major complimentary helpers method that do much of the work
 impl<'a> Parser<'a> {
-    /// If this returns a Some(), we know that there is 
-    /// a data type to be returned,
-    /// if we got a None, we know that it doesn't return
-    /// anything
-    fn parse_data_type(&mut self) -> Option<DataType> {        
-        if let Ok(current) = self.current() {
-            match current.kind {
-                TokenKind::Keyword(keyword) => match keyword {
-                    Keyword::DataType(_type) => Some(_type),
-                    _ => None
-                },
-                _ => None
+    fn parse_comma_separated<T, F>(
+        &mut self,
+        // The method to call to parse the item
+        mut parse_item: F,
+    ) -> Result<Vec<T>>
+    where 
+        F: FnMut(&mut Self) -> Result<T>,
+    {
+        let mut items = Vec::new();
+
+        // We do take_if() instead of at() because we want to consume and return if
+        // we are already at )
+        // 
+        // Another reason for us to take RParen instead of returning/letting the caller
+        // consume is that the caller calls this method only if they have already found/consumed
+        // LParen, so we dont make them think whether or not this method has finished parsing or not
+        // 
+        // We always finish everything inside (), consume the last ) and only return 
+        if self.take_if(TokenKind::RParen) {
+            return Ok(items);
+        }
+
+        loop {
+            items.push(parse_item(self)?);
+
+            if self.take_if(TokenKind::RParen) {
+                break;
             }
-        } else {
-            None
+
+            self.expect(TokenKind::Comma)?;
+
+            if self.at(TokenKind::RParen) {
+                return Err(ParseError::TokenExpected(
+                    "Expected an item after ','".to_string()
+                ));
+            }
+        }
+
+        Ok(items)
+    }
+
+    /// Parse any code block typically enclosed between {}}
+    fn parse_block(&mut self) -> Result<Box<[Stmt]>> {
+        // The block needs to start with a {
+        self.expect(TokenKind::LBrace)?;
+
+        let mut stmts = Vec::new();
+
+        // Keep going until we get the stop kind or }
+        while !self.at(TokenKind::RBrace) {
+            if self.is_at_end() {
+                return Err(ParseError::TokenExpected(
+                    "Expected '}' before end of file!".to_string()
+                ));
+            }
+
+            stmts.push(self.parse_statement()?);
+        }
+        
+        // We must get a } or stop_kind after we have finished parsing a block
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(stmts.into_boxed_slice())
+    }
+
+    fn parse_condition_stmt(&mut self, keyword: Keyword) -> Result<Stmt> {
+        self.expect_keyword(keyword)?;
+
+        match keyword {
+            Keyword::If => Ok(Stmt::If { 
+                condition: self.parse_expression()?,
+                body: self.parse_block()?
+            }),
+
+            Keyword::While => Ok(Stmt::While { 
+                condition: self.parse_expression()?,
+                body: self.parse_block()?
+            }),
+
+            _ => {
+                return Err(ParseError::UnsupportedConditionalStatement(
+                    "Unsupported conditional statement was found!\n Use if or while instead".to_string()
+                ))
+            }
+        }
+    }
+
+    fn take_boolean_literal(&mut self) -> Result<BooleanVal> {
+        match self.current()?.kind {
+            TokenKind::BooleanLiteral(value) => {
+                self.advance()?;
+                Ok(value)
+            }
+            _ => Err(ParseError::TokenExpected(
+                "Expected a token".to_string()
+            ))
         }
     }
 }
 
-/// All the helper methods for the parser
+/// General token helper methods
 impl<'a> Parser<'a> {
+    fn is_at_end(&self) -> bool {
+        self.position >= self.tokens.len()
+    }
+    
+    /// Get the current but give None if there's non (eof)
+    fn current_opt(&self) -> Option<&Token<'a>> {
+        self.tokens.get(self.position)
+    }
+
     /// If there are some tokens left, we will most likely get an Ok(),
     /// from the get statement below
     fn current(&self) -> Result<&Token<'a>> {
-        if let Some(current) = self.tokens.get(self.position) {
-            // Return the token from the current position
-            Ok(current)
-        } else {
-            // If we got None, maybe there are no tokens left, meaning we are
-            // at Eof
-            Err(ParseError::Eof)
-        }
+        self.current_opt().ok_or(ParseError::Eof)
+    }
+    
+    fn current_kind(&self) -> Option<TokenKind> {
+        self.current_opt().map(|token| token.kind)
     }
 
-    #[allow(unused)]
-    fn peek(&self) -> Result<&Token<'a>> {
-        if self.is_at_end() {
-            return Err(ParseError::Eof)
-        }
+    fn curr_lexeme(&self) -> Result<String> {
+        Ok(self.current()?.lexeme.to_string())
+    }
 
-        if let Some(next) = self.tokens.get(self.position + 1) {
-            Ok(next)
+    fn peek_opt(&self) -> Option<&Token<'a>> {
+        self.tokens.get(self.position + 1)
+    }
+
+    fn peek_kind(&self) -> Option<TokenKind> {
+        self.peek_opt().map(|token| token.kind)
+    }
+
+    /// Are we at this tokenkind? True if yes
+    fn at(&self, kind: TokenKind) -> bool {
+        self.current_kind() == Some(kind)
+    }
+
+    /// Advance/consume if the current kind is this
+    fn take_if(&mut self, kind: TokenKind) -> bool {
+        if self.at(kind) {
+            self.position += 1;
+            true
         } else {
-            Err(ParseError::Eof)
+            false
         }
     }
 
@@ -888,29 +675,116 @@ impl<'a> Parser<'a> {
         self.tokens
             .get(self.position - 1)
             .ok_or(ParseError::Eof)
-    }
+    }    
+}
 
-    fn keyword(&self) -> Result<Keyword> {
-        match self.current()?.kind {
-            TokenKind::Keyword(keyword) => {
-                Ok(keyword)
-            },
-            _ => return Err(
-                ParseError::NotAKeyword(
-                    self.current()?.lexeme.to_string()
-                )
-            )
+/// Specific token related helpers
+impl<'a> Parser<'a> {
+    /// We expect a certain kind.
+    /// Consume if we got it; and throw an error if we didn't get it
+    fn expect(&mut self, expected: TokenKind) -> Result<()> {
+        if self.take_if(expected) {
+            Ok(())
+        } else if self.is_at_end() {
+            Err(ParseError::TokenExpected(
+                format!("Expected {expected:#?}, but reached end of file")
+            ))
+        } else {
+            let actual = self.curr_lexeme()?;
+
+            Err(ParseError::TokenExpected(
+                format!("Expected {expected:#?}, got '{actual}'")
+            ))
         }
     }
-    
-    fn is_at_end(&self) -> bool {
-        self.position >= self.tokens.len()
+
+    /// If the current kind is an identifier (confirmed if expect() passed)
+    /// we return the current lexeme; being sure it's an identifier
+    fn expect_identifier(&mut self) -> Result<String> {
+        if !self.at(TokenKind::Identifier) {
+            return Err(ParseError::TokenExpected(
+                "Expected an identifier".to_string()
+            ));
+        }
+
+        let identifier = self.curr_lexeme()?;
+        self.advance()?;
+
+        Ok(identifier)
+    }
+
+    fn expect_keyword(&mut self, expected: Keyword) -> Result<()> {
+        match self.current()?.kind {
+            TokenKind::Keyword(keyword) if keyword == expected => {
+                self.advance()?;
+                Ok(())
+            }
+
+            TokenKind::Keyword(keyword) => {
+                Err(ParseError::TokenExpected(
+                    format!("Expected keyword '{expected:#?}', got '{keyword:#?}'")
+                ))
+            }
+
+            _ => {
+                let actual = self.curr_lexeme()?;
+
+                Err(ParseError::TokenExpected(
+                    format!("Expected keyword, got '{actual}'")
+                ))
+            }
+        }
+    }
+
+    /// Keyword data type means int, float etc
+    fn current_data_type(&self) -> Option<DataType> {
+        match self.current_kind()? {
+            TokenKind::Keyword(Keyword::DataType(data_type)) => Some(data_type),
+            _ => None
+        }
+    }
+
+    /// Consume the data type if present
+    fn take_data_type(&mut self) -> Option<DataType> {
+        let dt = self.current_data_type()?;
+        self.advance().ok();
+        Some(dt)
+    }
+
+    fn current_prefix_operator(&self) -> Option<UnaryOp> {
+        match self.current_kind()? {
+            TokenKind::Plus => Some(UnaryOp::Plus),
+            TokenKind::Minus => Some(UnaryOp::Minus),
+            TokenKind::Not => Some(UnaryOp::Not),
+            TokenKind::PlusPlus => Some(UnaryOp::Increment),
+            TokenKind::MinusMinus => Some(UnaryOp::Decrement),
+            _ => None
+        }
+    }
+
+    /// Consume and return the data type if we got it.
+    /// But throw an error if there is no data type currently
+    fn expect_data_type(&mut self) -> Result<DataType> {
+        self.take_data_type().ok_or_else(|| {
+            ParseError::TokenExpected(
+                "Expected a data type (eg: int, float, sting)".to_string()
+            )
+        })
     }
 }
 
 /// An external helper for parsing strings to f64
 fn parse_to_f64(input: &str) -> Option<f64> {
     if let Ok(integer) = input.parse::<f64>() {
+        Some(integer)
+    } else {
+        None
+    }
+}
+
+/// An external helper for parsing strings to i64
+fn parse_to_i64(input: &str) -> Option<i64> {
+    if let Ok(integer) = input.parse::<i64>() {
         Some(integer)
     } else {
         None

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::frontend::{
-    BinaryOp, BooleanType, ConditionalOp, DataType, Expr, FunctionParamater, Program, Stmt,
+    BinaryOp, BooleanVal, ConditionalOp, DataType, Expr, FunctionParameter, Program, Stmt, UnaryFixity, UnaryOp,
 };
 
 use super::{
@@ -133,7 +133,7 @@ impl Interpreter {
         
         Err(
             EvalError::UndefinedVariable(
-                format!("Identifier '{name}' is undefined!")
+                format!("{name}")
             )
         )
     }
@@ -227,6 +227,14 @@ impl Interpreter {
                 // 
                 // Evaluation of function call expression executes it
                 self.eval_function_stmt(name, parameters, return_type, return_expr, body)
+            },
+            Stmt::Return(expr) => {
+                let _ = self.eval_expression(expr)?;
+                Ok(())
+            },
+            Stmt::Expression(expr)  => {
+                let _ = self.eval_expression(expr)?;
+                Ok(())
             }
         }
     }
@@ -259,7 +267,7 @@ impl Interpreter {
         body: &Box<[Stmt]>
     ) -> Result<()> {
 
-        if self.eval_expression(condition)? == Value::Boolean(BooleanType::True) {
+        if self.eval_expression(condition)? == Value::Boolean(BooleanVal::True) {
             for stmt in body.iter() {
                 self.eval_stmt(&stmt)?
             }
@@ -274,7 +282,7 @@ impl Interpreter {
         body: &Box<[Stmt]>
     ) -> Result<()> {
 
-        while self.eval_expression(condition)? == Value::Boolean(BooleanType::True) {
+        while self.eval_expression(condition)? == Value::Boolean(BooleanVal::True) {
             for stmt in body.iter() {
                 self.eval_stmt(&stmt)?
             }
@@ -288,7 +296,7 @@ impl Interpreter {
     /// of the function body occurs only when it is called 
     /// 
     /// For example: 
-    /// ```
+    /// ```no_run
     /// // It's just registered here
     /// fn main() {
     ///     // do something
@@ -299,7 +307,7 @@ impl Interpreter {
     fn eval_function_stmt(
         &mut self,
         name: &str,
-        parameters: &Box<[FunctionParamater]>,
+        parameters: &Box<[FunctionParameter]>,
         return_type: &Option<DataType>,
         return_expr: &Option<Expr>,
         body: &Box<[Stmt]>
@@ -336,7 +344,8 @@ impl Interpreter {
     ) -> Result<Value> {
         
         match expression {
-            Expr::Number(value) => Ok(Value::Number(*value)),
+            Expr::Integer(value) => Ok(Value::Integer(*value)),
+            Expr::Float(value) => Ok(Value::Float(*value)),
             Expr::String(value) => Ok(Value::String(value.clone())),
             Expr::Identifier(name) => {
                 // println!("From interpreter/impl.rs line 325\n");
@@ -351,6 +360,9 @@ impl Interpreter {
             Expr::Conditional { left, operator, right } => {
                 self.eval_conditional_expression(left, operator, right)
             },
+            Expr::Unary { operator, operand, fixity } => {
+                self.eval_unary_expression(operator, operand, *fixity)
+            },
             Expr::FunctionCall { name, arguments } => {
                 self.eval_function_call_expression(name, arguments)
             }
@@ -359,11 +371,11 @@ impl Interpreter {
 
     fn eval_boolean_expression(
         &mut self,
-        boolean_type: &BooleanType
+        boolean_type: &BooleanVal
     ) -> Result<Value> {
         match boolean_type {
-            BooleanType::True => Ok(Value::Boolean(BooleanType::True)),
-            BooleanType::False => Ok(Value::Boolean(BooleanType::False))
+            BooleanVal::True => Ok(Value::Boolean(BooleanVal::True)),
+            BooleanVal::False => Ok(Value::Boolean(BooleanVal::False))
         }
     }
     
@@ -378,23 +390,83 @@ impl Interpreter {
         let right = self.eval_expression(right)?;
 
         match (left, right) {
-            (Value::Number(left), Value::Number(right)) => {
+            (Value::Integer(left), Value::Integer(right)) => {
                 match operator {
-                    BinaryOp::Add => Ok(Value::Number(left + right)),
-                    BinaryOp::Subtract => Ok(Value::Number(left - right)),
-                    BinaryOp::Multiply => Ok(Value::Number(left * right)),
+                    BinaryOp::Add => Ok(Value::Integer(left + right)),
+                    BinaryOp::Subtract => Ok(Value::Integer(left - right)),
+                    BinaryOp::Multiply => Ok(Value::Integer(left * right)),
                     BinaryOp::Divide => {
-                        if right == 0.0 {
+                        if right == 0 {
                             return Err(
                                 EvalError::InvalidBinaryOperation {
-                                    left: Value::Number(left),
+                                    left: Value::Integer(left),
                                     operator: BinaryOp::Divide,
-                                    right: Value::Number(right)
+                                    right: Value::Integer(right)
                                 }
                             )
                         }
 
-                        Ok(Value::Number(left / right))
+                        Ok(Value::Integer(left / right))
+                    },
+                }
+            },
+            (Value::Float(left), Value::Float(right)) => {
+                match operator {
+                    BinaryOp::Add => Ok(Value::Float(left + right)),
+                    BinaryOp::Subtract => Ok(Value::Float(left - right)),
+                    BinaryOp::Multiply => Ok(Value::Float(left * right)),
+                    BinaryOp::Divide => {
+                        if right == 0.0 {
+                            return Err(
+                                EvalError::InvalidBinaryOperation {
+                                    left: Value::Float(left),
+                                    operator: BinaryOp::Divide,
+                                    right: Value::Float(right)
+                                }
+                            )
+                        }
+
+                        Ok(Value::Float(left / right))
+                    },
+                }
+            },
+            (Value::Integer(left), Value::Float(right)) => {
+                match operator {
+                    BinaryOp::Add => Ok(Value::Float(left as f64 + right)),
+                    BinaryOp::Subtract => Ok(Value::Float(left as f64 - right)),
+                    BinaryOp::Multiply => Ok(Value::Float(left as f64 * right)),
+                    BinaryOp::Divide => {
+                        if right == 0.0 {
+                            return Err(
+                                EvalError::InvalidBinaryOperation {
+                                    left: Value::Integer(left),
+                                    operator: BinaryOp::Divide,
+                                    right: Value::Float(right)
+                                }
+                            )
+                        }
+
+                        Ok(Value::Float(left as f64 / right))
+                    },
+                }
+            },
+            (Value::Float(left), Value::Integer(right)) => {
+                match operator {
+                    BinaryOp::Add => Ok(Value::Float(left + right as f64)),
+                    BinaryOp::Subtract => Ok(Value::Float(left - right as f64)),
+                    BinaryOp::Multiply => Ok(Value::Float(left * right as f64)),
+                    BinaryOp::Divide => {
+                        if right == 0 {
+                            return Err(
+                                EvalError::InvalidBinaryOperation {
+                                    left: Value::Float(left),
+                                    operator: BinaryOp::Divide,
+                                    right: Value::Integer(right)
+                                }
+                            )
+                        }
+
+                        Ok(Value::Float(left / right as f64))
                     },
                 }
             },
@@ -410,6 +482,40 @@ impl Interpreter {
         }
     }
 
+    fn eval_unary_expression(
+        &mut self,
+        operator: &UnaryOp,
+        operand: &Box<Expr>,
+        fixity: UnaryFixity
+    ) -> Result<Value> {
+        
+        let operand_val = self.eval_expression(operand)?;
+
+        println!("Got operator '{operator:#?}' Operand_val '{operand_val}' and fixity '{fixity:#?}'");
+        
+        match (operator, operand_val, fixity) {
+            (UnaryOp::Plus, Value::Integer(num), UnaryFixity::Prefix) => Ok(Value::Integer(num.abs())),
+            (UnaryOp::Plus, Value::Float(num), UnaryFixity::Prefix) => Ok(Value::Float(num.abs())),
+            
+            (UnaryOp::Minus, Value::Integer(num), UnaryFixity::Prefix) => Ok(Value::Integer(-num)),
+            (UnaryOp::Minus, Value::Float(num), UnaryFixity::Prefix) => Ok(Value::Float(-num)),
+            
+            (UnaryOp::Increment, Value::Integer(num), UnaryFixity::Postfix) => Ok(Value::Integer(num + 1)),
+            (UnaryOp::Increment, Value::Float(num), UnaryFixity::Postfix) => Ok(Value::Float(num + 1.0)),
+            
+            (UnaryOp::Decrement, Value::Integer(num), UnaryFixity::Postfix) => Ok(Value::Integer(num - 1)),
+            (UnaryOp::Decrement, Value::Float(num), UnaryFixity::Postfix) => Ok(Value::Float(num - 1.0)),
+
+            (UnaryOp::Not, Value::Boolean(bool_val), UnaryFixity::Prefix) => Ok(Value::Boolean(flip_bool_type(bool_val))),
+            
+            _ => return Err(EvalError::InvalidUnaryOperation {
+                operator: *operator,
+                operand: operand.clone(),
+                fixity
+            })
+        }
+    }
+    
     fn eval_conditional_expression(
         &mut self,
         left: &Expr,
@@ -421,7 +527,109 @@ impl Interpreter {
         let right = self.eval_expression(right)?;
 
         match (left, right) {
-            (Value::Number(left), Value::Number(right)) => {
+            (Value::Integer(left), Value::Integer(right)) => {
+                match operator {
+                    ConditionalOp::IsEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left == right))
+                        )
+                    },
+                    ConditionalOp::IsNotEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left != right))
+                        )
+                    },
+                    ConditionalOp::IsGreaterThan => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left > right))
+                        )
+                    },
+                    ConditionalOp::IsLessThan => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left < right))
+                        )
+                    },
+                    ConditionalOp::IsGreaterOrEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left >= right))
+                        )
+                    },
+                    ConditionalOp::IsLessOrEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left <= right))
+                        )
+                    }
+                }
+            },
+            (Value::Integer(left), Value::Float(right)) => {
+                match operator {
+                    ConditionalOp::IsEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left as f64 == right))
+                        )
+                    },
+                    ConditionalOp::IsNotEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left as f64 != right))
+                        )
+                    },
+                    ConditionalOp::IsGreaterThan => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left as f64 > right))
+                        )
+                    },
+                    ConditionalOp::IsLessThan => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type((left as f64) < right))
+                        )
+                    },
+                    ConditionalOp::IsGreaterOrEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left as f64 >= right))
+                        )
+                    },
+                    ConditionalOp::IsLessOrEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left as f64 <= right))
+                        )
+                    }
+                }
+            },
+            (Value::Float(left), Value::Integer(right)) => {
+                match operator {
+                    ConditionalOp::IsEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left == right as f64))
+                        )
+                    },
+                    ConditionalOp::IsNotEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left != right as f64))
+                        )
+                    },
+                    ConditionalOp::IsGreaterThan => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left > right as f64))
+                        )
+                    },
+                    ConditionalOp::IsLessThan => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left < right as f64))
+                        )
+                    },
+                    ConditionalOp::IsGreaterOrEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left >= right as f64))
+                        )
+                    },
+                    ConditionalOp::IsLessOrEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(left <= right as f64))
+                        )
+                    }
+                }
+            },
+            (Value::Float(left), Value::Float(right)) => {
                 match operator {
                     ConditionalOp::IsEqualTo => {
                         Ok(Value::Boolean
@@ -493,7 +701,7 @@ impl Interpreter {
                 // called function expects; based on position
                 for (parameter, argument) in func.parameters.iter().zip(arguments.iter()) {
                     let arg_val = self.eval_expression(argument)?;
-
+    
                     self.define(
                         // We define the arguments and their values from the callers environment
                         // in the execution environment of the function
@@ -513,8 +721,15 @@ impl Interpreter {
                         let value = self.eval_expression(return_expr)?;
         
                         match value {
-                            Value::Number(_) => {
+                            Value::Integer(_) => {
                                 if return_type != DataType::Integer {
+                                    return Err(
+                                        EvalError::InvalidReturnType(value)
+                                    )
+                                }
+                            },
+                            Value::Float(_) => {
+                                if return_type != DataType::Float {
                                     return Err(
                                         EvalError::InvalidReturnType(value)
                                     )
@@ -566,10 +781,24 @@ impl Interpreter {
     }
 }
 
-fn bool_raw_to_type(raw: bool) -> BooleanType {
+fn bool_raw_to_type(raw: bool) -> BooleanVal {
     match raw {
-        true => BooleanType::True,
-        false => BooleanType::False
+        true => BooleanVal::True,
+        false => BooleanVal::False
+    }
+}
+
+fn bool_type_to_raw(bool_type: BooleanVal) -> bool {
+    match bool_type {
+        BooleanVal::True => true,
+        BooleanVal::False => false
+    }
+}
+
+fn flip_bool_type(boolean: BooleanVal) -> BooleanVal {
+    match boolean {
+        BooleanVal::True => BooleanVal::False,
+        BooleanVal::False => BooleanVal::True
     }
 }
 
@@ -580,17 +809,17 @@ fn ok_evaluate_binary_expression_with_identifier() {
     let mut interpreter = Interpreter::new();
     
     // Define the variable "x" with 5.0
-    let _ = interpreter.define_current("x".to_string(), Value::Number(5.0));
+    let _ = interpreter.define_current("x".to_string(), Value::Integer(5));
 
     let expression = Expr::Binary {
         left: Box::new(Expr::Identifier("x".to_string())),
         operator: BinaryOp::Add,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Integer(10))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression),
-        Ok(Value::Number(15.0))
+        Ok(Value::Integer(15))
     );
 }
 
@@ -606,7 +835,7 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
     let expression = Expr::Binary {
         left: Box::new(Expr::Identifier("x".to_string())),
         operator: BinaryOp::Add,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Integer(10))
     };
 
     assert_eq!(
@@ -615,7 +844,7 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
             EvalError::InvalidBinaryOperation {
                 left: Value::String("a_string".to_string()),
                 operator: BinaryOp::Add,
-                right: Value::Number(10.0)
+                right: Value::Integer(10)
             }
         )
     );
@@ -623,7 +852,7 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
     let expression2 = Expr::Binary {
         left: Box::new(Expr::Identifier("y".to_string())),
         operator: BinaryOp::Add,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
@@ -638,52 +867,52 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
 fn ok_evaluate_normal_binary_expression() {
     let mut interpreter = Interpreter::new();
 
-    // 10.0 + 20.0 = 30.0
+    // 10 + 20 = 30
     let expression1 = Expr::Binary {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Integer(10)),
         operator: BinaryOp::Add,
-        right: Box::new(Expr::Number(20.0))
+        right: Box::new(Expr::Integer(20))
     };
     
     assert_eq!(
         interpreter.eval_expression(&expression1),
-        Ok(Value::Number(30.0))
+        Ok(Value::Integer(30))
     );
 
     // 20.0 - 10.0 = 10.0
     let expression2 = Expr::Binary {
-        left: Box::new(Expr::Number(20.0)),
+        left: Box::new(Expr::Float(20.0)),
         operator: BinaryOp::Subtract,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression2),
-        Ok(Value::Number(10.0))
+        Ok(Value::Float(10.0))
     );
 
-    // 20.0 * 10.0 = 200.0
+    // 20 * 10 = 200
     let expression3 = Expr::Binary {
-        left: Box::new(Expr::Number(20.0)),
+        left: Box::new(Expr::Integer(20)),
         operator: BinaryOp::Multiply,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Integer(10))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression3),
-        Ok(Value::Number(200.0))
+        Ok(Value::Integer(200))
     );
 
     // 20.0 / 10.0 = 2.0
     let expression4 = Expr::Binary {
-        left: Box::new(Expr::Number(20.0)),
+        left: Box::new(Expr::Float(20.0)),
         operator: BinaryOp::Divide,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression4),
-        Ok(Value::Number(2.0))
+        Ok(Value::Float(2.0))
     );
 
 }
@@ -693,17 +922,17 @@ fn err_evaluate_divide_by_zero() {
     let mut interpreter = Interpreter::new();
 
     let expression1 = Expr::Binary{
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: BinaryOp::Divide,
-        right: Box::new(Expr::Number(0.0))
+        right: Box::new(Expr::Float(0.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression1),
         Err(EvalError::InvalidBinaryOperation {
-            left: Value::Number(10.0),
+            left: Value::Float(10.0),
             operator: BinaryOp::Divide,
-            right: Value::Number(0.0)
+            right: Value::Float(0.0)
         })
     );
 }
@@ -716,7 +945,7 @@ fn err_evaluate_binary_expression_with_string() {
     let expression1 = Expr::Binary {
         left: Box::new(Expr::String("something".to_string())),
         operator: BinaryOp::Add,
-        right: Box::new(Expr::Number(20.0))
+        right: Box::new(Expr::Integer(20))
     };
     
     assert_eq!(
@@ -724,7 +953,7 @@ fn err_evaluate_binary_expression_with_string() {
         Err(EvalError::InvalidBinaryOperation {
             left: Value::String("something".to_string()),
             operator: BinaryOp::Add,
-            right: Value::Number(20.0)
+            right: Value::Integer(20)
         })
     );
 
@@ -732,7 +961,7 @@ fn err_evaluate_binary_expression_with_string() {
     let expression2 = Expr::Binary {
         left: Box::new(Expr::String("something".to_string())),
         operator: BinaryOp::Subtract,
-        right: Box::new(Expr::Number(20.0))
+        right: Box::new(Expr::Float(20.0))
     };
     
     assert_eq!(
@@ -740,7 +969,7 @@ fn err_evaluate_binary_expression_with_string() {
         Err(EvalError::InvalidBinaryOperation {
             left: Value::String("something".to_string()),
             operator: BinaryOp::Subtract,
-            right: Value::Number(20.0)
+            right: Value::Float(20.0)
         })
     );
 
@@ -748,7 +977,7 @@ fn err_evaluate_binary_expression_with_string() {
     let expression3 = Expr::Binary {
         left: Box::new(Expr::String("something".to_string())),
         operator: BinaryOp::Multiply,
-        right: Box::new(Expr::Number(20.0))
+        right: Box::new(Expr::Integer(20))
     };
     
     assert_eq!(
@@ -756,7 +985,7 @@ fn err_evaluate_binary_expression_with_string() {
         Err(EvalError::InvalidBinaryOperation {
             left: Value::String("something".to_string()),
             operator: BinaryOp::Multiply,
-            right: Value::Number(20.0)
+            right: Value::Integer(20)
         })
     );
 
@@ -764,7 +993,7 @@ fn err_evaluate_binary_expression_with_string() {
     let expression4 = Expr::Binary {
         left: Box::new(Expr::String("something".to_string())),
         operator: BinaryOp::Divide,
-        right: Box::new(Expr::Number(20.0))
+        right: Box::new(Expr::Float(20.0))
     };
     
     assert_eq!(
@@ -772,7 +1001,7 @@ fn err_evaluate_binary_expression_with_string() {
         Err(EvalError::InvalidBinaryOperation {
             left: Value::String("something".to_string()),
             operator: BinaryOp::Divide,
-            right: Value::Number(20.0)
+            right: Value::Float(20.0)
         })
     );
 
@@ -784,18 +1013,18 @@ fn ok_evaluate_normal_nested_binary_expression() {
     let mut interpreter = Interpreter::new();
 
     let expression = Expr::Binary {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Integer(10)),
         operator: BinaryOp::Add,
         right: Box::new(Expr::Binary {
-            left: Box::new(Expr::Number(20.0)),
+            left: Box::new(Expr::Integer(20)),
             operator: BinaryOp::Multiply,
-            right: Box::new(Expr::Number(2.0))
+            right: Box::new(Expr::Float(2.0))
         })
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression),
-        Ok(Value::Number(50.0))
+        Ok(Value::Float(50.0))
     );
 }
 
@@ -804,10 +1033,10 @@ fn err_evaluate_invalid_binary_expression() {
     let mut interpreter = Interpreter::new();
     
     let expression = Expr::Binary {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: BinaryOp::Add,
         right: Box::new(Expr::Binary {
-            left: Box::new(Expr::Number(20.0)),
+            left: Box::new(Expr::Float(20.0)),
             operator: BinaryOp::Multiply,
             right: Box::new(Expr::String("invalid".to_string()))
         })
@@ -816,7 +1045,7 @@ fn err_evaluate_invalid_binary_expression() {
     assert_eq!(
         interpreter.eval_expression(&expression),
         Err(EvalError::InvalidBinaryOperation {
-            left: Value::Number(20.0),
+            left: Value::Float(20.0),
             operator: BinaryOp::Multiply,
             right: Value::String("invalid".to_string())
         })
@@ -829,74 +1058,74 @@ fn ok_evaluate_conditional_expression() {
 
     // 10.0 == 10.0: true
     let expression1 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: ConditionalOp::IsEqualTo,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression1),
-        Ok(Value::Boolean(BooleanType::True))
+        Ok(Value::Boolean(BooleanVal::True))
     );
 
     // 10.0 > 10.0: false
     let expression2 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: ConditionalOp::IsGreaterThan,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression2),
-        Ok(Value::Boolean(BooleanType::False))
+        Ok(Value::Boolean(BooleanVal::False))
     );
 
     // 10.0 < 10.0: false
     let expression3 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: ConditionalOp::IsLessThan,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression3),
-        Ok(Value::Boolean(BooleanType::False))
+        Ok(Value::Boolean(BooleanVal::False))
     );
 
     // 10.0 != 10.0: false
     let expression4 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: ConditionalOp::IsNotEqualTo,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression4),
-        Ok(Value::Boolean(BooleanType::False))
+        Ok(Value::Boolean(BooleanVal::False))
     );
 
     // 10.0 >= 10.0: true
     let expression5 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: ConditionalOp::IsGreaterOrEqualTo,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression5),
-        Ok(Value::Boolean(BooleanType::True))
+        Ok(Value::Boolean(BooleanVal::True))
     );
 
     // 10.0 <= 10.0: true
     let expression6 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: ConditionalOp::IsLessOrEqualTo,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression6),
-        Ok(Value::Boolean(BooleanType::True))
+        Ok(Value::Boolean(BooleanVal::True))
     );
 }
 
@@ -906,53 +1135,53 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     // 10.0 == (5.0 + 5.0): true
     let expression1 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Integer(10)),
         operator: ConditionalOp::IsEqualTo,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Number(5.0)),
+                left: Box::new(Expr::Integer(5)),
                 operator: BinaryOp::Add,
-                right: Box::new(Expr::Number(5.0))
+                right: Box::new(Expr::Float(5.0))
             }
         )
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression1),
-        Ok(Value::Boolean(BooleanType::True))
+        Ok(Value::Boolean(BooleanVal::True))
     );
 
     // 10.0 < (5.0 + 5.0): true
     let expression2 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: ConditionalOp::IsLessThan,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Number(5.0)),
+                left: Box::new(Expr::Float(5.0)),
                 operator: BinaryOp::Add,
-                right: Box::new(Expr::Number(5.0))
+                right: Box::new(Expr::Integer(5))
             }
         )
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression2),
-        Ok(Value::Boolean(BooleanType::False))
+        Ok(Value::Boolean(BooleanVal::False))
     );
 
     // 10.0 > (5.0 + (15.0 - 5.0)): false
     let expression3 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Integer(10)),
         operator: ConditionalOp::IsGreaterThan,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Number(5.0)),
+                left: Box::new(Expr::Integer(5)),
                 operator: BinaryOp::Add,
                 right: Box::new(
                     Expr::Binary {
-                        left: Box::new(Expr::Number(15.0)),
+                        left: Box::new(Expr::Float(15.0)),
                         operator: BinaryOp::Subtract,
-                        right: Box::new(Expr::Number(5.0))
+                        right: Box::new(Expr::Float(5.0))
                     }
                 )
             }
@@ -961,22 +1190,22 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     assert_eq!(
         interpreter.eval_expression(&expression3),
-        Ok(Value::Boolean(BooleanType::False))
+        Ok(Value::Boolean(BooleanVal::False))
     );
 
     // 10.0 != (5.0 + (15.0 - 5.0)): true
     let expression4 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Integer(10)),
         operator: ConditionalOp::IsNotEqualTo,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Number(5.0)),
+                left: Box::new(Expr::Integer(5)),
                 operator: BinaryOp::Add,
                 right: Box::new(
                     Expr::Binary {
-                        left: Box::new(Expr::Number(15.0)),
+                        left: Box::new(Expr::Float(15.0)),
                         operator: BinaryOp::Subtract,
-                        right: Box::new(Expr::Number(5.0))
+                        right: Box::new(Expr::Float(5.0))
                     }
                 )
             }
@@ -985,22 +1214,22 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     assert_eq!(
         interpreter.eval_expression(&expression4),
-        Ok(Value::Boolean(BooleanType::True))
+        Ok(Value::Boolean(BooleanVal::True))
     );
 
     // 10.0 >= (5.0 + (15.0 - 5.0)): false
     let expression5 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: ConditionalOp::IsGreaterOrEqualTo,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Number(5.0)),
+                left: Box::new(Expr::Float(5.0)),
                 operator: BinaryOp::Add,
                 right: Box::new(
                     Expr::Binary {
-                        left: Box::new(Expr::Number(15.0)),
+                        left: Box::new(Expr::Integer(15)),
                         operator: BinaryOp::Subtract,
-                        right: Box::new(Expr::Number(5.0))
+                        right: Box::new(Expr::Integer(5))
                     }
                 )
             }
@@ -1009,22 +1238,22 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     assert_eq!(
         interpreter.eval_expression(&expression5),
-        Ok(Value::Boolean(BooleanType::False))
+        Ok(Value::Boolean(BooleanVal::False))
     );
 
     // 10.0 <= (5.0 + (15.0 - 5.0)): true
     let expression6 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: ConditionalOp::IsLessOrEqualTo,
         right: Box::new(
             Expr::Binary {
-                left: Box::new(Expr::Number(5.0)),
+                left: Box::new(Expr::Float(5.0)),
                 operator: BinaryOp::Add,
                 right: Box::new(
                     Expr::Binary {
-                        left: Box::new(Expr::Number(15.0)),
+                        left: Box::new(Expr::Integer(15)),
                         operator: BinaryOp::Subtract,
-                        right: Box::new(Expr::Number(5.0))
+                        right: Box::new(Expr::Integer(5))
                     }
                 )
             }
@@ -1033,7 +1262,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 
     assert_eq!(
         interpreter.eval_expression(&expression6),
-        Ok(Value::Boolean(BooleanType::True))
+        Ok(Value::Boolean(BooleanVal::True))
     );
     
 }
@@ -1042,8 +1271,8 @@ fn ok_evaluate_nested_binary_conditional_expression() {
 fn ok_evaluate_conditional_expression_with_identifiers() {
     let mut interpreter = Interpreter::new();
     
-    let _ = interpreter.define_current("x".to_string(), Value::Number(10.0));
-    let _ = interpreter.define_current("y".to_string(), Value::Number(5.0));
+    let _ = interpreter.define_current("x".to_string(), Value::Float(10.0));
+    let _ = interpreter.define_current("y".to_string(), Value::Integer(5));
     
     // x(10.0) == y(5.0): false
     let expression1 = Expr::Conditional {
@@ -1054,7 +1283,7 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
 
     assert_eq!(
         interpreter.eval_expression(&expression1),
-        Ok(Value::Boolean(BooleanType::False))
+        Ok(Value::Boolean(BooleanVal::False))
     );
 
     // x(10.0) > y(5.0): true
@@ -1066,7 +1295,7 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
 
     assert_eq!(
         interpreter.eval_expression(&expression2),
-        Ok(Value::Boolean(BooleanType::True))
+        Ok(Value::Boolean(BooleanVal::True))
     );
 
     // x(10.0) < y(5.0): false
@@ -1078,7 +1307,7 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
 
     assert_eq!(
         interpreter.eval_expression(&expression3),
-        Ok(Value::Boolean(BooleanType::False))
+        Ok(Value::Boolean(BooleanVal::False))
     );
 }
 
@@ -1090,7 +1319,7 @@ fn err_evaluate_conditional_expression() {
     let expression1 = Expr::Conditional {
         left: Box::new(Expr::String("x".to_string())),
         operator: ConditionalOp::IsEqualTo,
-        right: Box::new(Expr::Number(10.0))
+        right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
@@ -1099,14 +1328,14 @@ fn err_evaluate_conditional_expression() {
             EvalError::InvalidConditionalOperation {
                 left: Value::String("x".to_string()),
                 operator: ConditionalOp::IsEqualTo,
-                right: Value::Number(10.0)
+                right: Value::Float(10.0)
             }
         )
     );
 
     // 10.0 == "x": Err()
     let expression1 = Expr::Conditional {
-        left: Box::new(Expr::Number(10.0)),
+        left: Box::new(Expr::Float(10.0)),
         operator: ConditionalOp::IsEqualTo,
         right: Box::new(Expr::String("x".to_string())),
     };
@@ -1115,7 +1344,7 @@ fn err_evaluate_conditional_expression() {
         interpreter.eval_expression(&expression1),
         Err(
             EvalError::InvalidConditionalOperation {
-                left: Value::Number(10.0),
+                left: Value::Float(10.0),
                 operator: ConditionalOp::IsEqualTo,
                 right: Value::String("x".to_string()),
             }
@@ -1149,12 +1378,12 @@ fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and
     let define_stmt = Stmt::Let {
         identifier: "x".to_string(),
         expression: Expr::Binary {
-            left: Box::new(Expr::Number(10.0)),
+            left: Box::new(Expr::Integer(10)),
             operator: BinaryOp::Add,
             right: Box::new(Expr::Binary {
-                left: Box::new(Expr::Number(10.0)),
+                left: Box::new(Expr::Float(10.0)),
                 operator: BinaryOp::Add,
-                right: Box::new(Expr::Number(10.0))
+                right: Box::new(Expr::Float(10.0))
             })
         }
     };
@@ -1168,12 +1397,12 @@ fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and
     let access_stmt = Stmt::Let {
         identifier: "y".to_string(),
         expression: Expr::Binary {
-            left: Box::new(Expr::Number(10.0)),
+            left: Box::new(Expr::Integer(10)),
             operator: BinaryOp::Add,
             right: Box::new(Expr::Binary {
                 left: Box::new(Expr::Identifier("x".to_string())),
                 operator: BinaryOp::Add,
-                right: Box::new(Expr::Number(10.0))
+                right: Box::new(Expr::Float(10.0))
             })
         }
     };
@@ -1192,7 +1421,7 @@ fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and
 
     assert_eq!(
         interpreter.eval_expression(&expression1),
-        Ok(Value::Number(80.0))
+        Ok(Value::Float(80.0))
     );
 
     // x(30) < y(50): true
@@ -1204,7 +1433,7 @@ fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and
 
     assert_eq!(
         interpreter.eval_expression(&expression2),
-        Ok(Value::Boolean(BooleanType::True))
+        Ok(Value::Boolean(BooleanVal::True))
     );
 }
 
@@ -1215,9 +1444,9 @@ fn ok_and_err_environment_define_and_get() {
     assert_eq!(
         interpreter.define_current(
             "x".to_string(),
-            Value::Number(10.0),
+            Value::Float(10.0),
         ),
-        Ok(Value::Number(10.0)),
+        Ok(Value::Float(10.0)),
     );
 
     assert_eq!(
@@ -1230,7 +1459,7 @@ fn ok_and_err_environment_define_and_get() {
         
     assert_eq!(
         interpreter.get_current("x"),
-        Ok(Value::Number(10.0))
+        Ok(Value::Float(10.0))
     );
 
     assert_eq!(

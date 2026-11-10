@@ -3,16 +3,17 @@ use std::{
     collections::HashMap, rc::Rc,
 };
 
-use crate::frontend::{DataType, BooleanType, Expr, FunctionParamater, Stmt};
+use crate::frontend::{BooleanVal, DataType, Expr, FunctionParameter, Stmt, UnaryFixity, UnaryOp};
 use crate::frontend::{BinaryOp, ConditionalOp};
 
 pub(super) type Result<T> = std::result::Result<T, EvalError>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    Number(f64),
+    Float(f64),
+    Integer(i64),
     String(String),
-    Boolean(BooleanType),
+    Boolean(BooleanVal),
 
     Function(Rc<Function>),
     
@@ -22,13 +23,14 @@ pub enum Value {
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Number(num) => write!(f, "{}", num),
-            Value::String(string) => write!(f, "{}", string),
+            Value::Integer(num) => write!(f, "Integer({})", num),
+            Value::Float(num) => write!(f, "Float({})", num),
+            Value::String(string) => write!(f, "String({})", string),
             Value::Boolean(bool_type) => {
-                if *bool_type == BooleanType::True {
-                    write!(f, "true")
+                if *bool_type == BooleanVal::True {
+                    write!(f, "Bool(true)")
                 } else {
-                    write!(f, "false")
+                    write!(f, "Bool(false)")
                 }
             },
             Value::Null => write!(f, "Null"),
@@ -79,6 +81,11 @@ pub enum EvalError {
         left: Value,
         operator: ConditionalOp,
         right: Value
+    },
+    InvalidUnaryOperation {
+        operator: UnaryOp,
+        operand: Box<Expr>,
+        fixity: UnaryFixity
     }
 }
 
@@ -95,7 +102,7 @@ pub struct Environment {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Function {
     pub(super) name: String,
-    pub(super) parameters: Box<[FunctionParamater]>,
+    pub(super) parameters: Box<[FunctionParameter]>,
     pub(super) return_type: Option<DataType>,
     pub(super) return_expr: Option<Expr>,
     pub(super) body: Box<[Stmt]>,
