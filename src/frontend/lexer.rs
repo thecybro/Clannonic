@@ -404,6 +404,10 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     self.advance();
                     return Ok(self.token(TokenKind::PlusPlus, start))
+                } else if self.peek() == Some('=') {
+                    self.advance();
+                    self.advance();
+                    return Ok(self.token(TokenKind::PlusEquals, start))
                 }
                 self.advance();
                 Ok(self.token(TokenKind::Plus, start))
@@ -417,6 +421,10 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     self.advance();
                     return Ok(self.token(TokenKind::Arrow, start))
+                } else if self.peek() == Some('=') {
+                    self.advance();
+                    self.advance();
+                    return Ok(self.token(TokenKind::MinusEquals, start))
                 }
                 self.advance();
                 Ok(self.token(TokenKind::Minus, start))

@@ -27,6 +27,9 @@ pub enum TokenKind {
 
     PlusPlus,
     MinusMinus,
+
+    PlusEquals,
+    MinusEquals,
     
     Arrow, // -> Used to indicate function return type
     
@@ -174,6 +177,12 @@ pub enum UnaryFixity {
     Postfix,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssignOp {
+    Assign, // =
+    AddAssign, // +=
+    SubtractAssign, // -=
+}
 
 /// The types of expressions supported
 #[derive(Debug, Clone, PartialEq)]
@@ -260,6 +269,7 @@ pub enum Stmt {
     },
     Assign {
       identifier: String,
+      operator: AssignOp,
       expression: Expr  
     },
     // I think the support for else if or elif branches is also

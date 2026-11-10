@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::frontend::{
-    BinaryOp, BooleanVal, ConditionalOp, DataType, Expr, FunctionParameter, Program, Stmt, UnaryFixity, UnaryOp,
+    AssignOp, BinaryOp, BooleanVal, ConditionalOp, DataType, Expr, FunctionParameter, Program, Stmt, UnaryFixity, UnaryOp,
 };
 
 use super::{
@@ -212,8 +212,8 @@ impl Interpreter {
             },
             // Assign statement replaces the identifier's value stored on the available
             // environment, but throws an error if it doesn't exist
-            Stmt::Assign { identifier, expression } => {
-                let _ = self.eval_assign_stmt(identifier, expression)?;
+            Stmt::Assign { identifier, operator, expression } => {
+                let _ = self.eval_assign_stmt(identifier, *operator, expression)?;
                 Ok(())
             }
             Stmt::If { condition, body } => {
@@ -250,15 +250,45 @@ impl Interpreter {
         self.define_current(identifier, value)
     }
 
+    /// Assign value to the stored identifier/value only if it matches the types
+    /// If the value being attempted to assign to the stored identifier doesnot match;
+    /// we throw an error
     fn eval_assign_stmt(
         &mut self,
         identifier: &str,
+        operator: AssignOp,
         expression: &Expr
     ) -> Result<Value> {
 
-        let value = self.eval_expression(expression)?;
+        let value = match operator {
+            AssignOp::Assign => {self.eval_expression(expression)?}
 
-        self.assign_current(identifier, &value)
+            AssignOp::AddAssign => {
+                let left = Expr::Identifier(identifier.to_string());
+                let operator = BinaryOp::Add;
+
+                self.eval_binary_expression(&left, &operator, expression)?
+            }
+
+            AssignOp::SubtractAssign => {
+                let left = Expr::Identifier(identifier.to_string());
+                let operator = BinaryOp::Subtract;
+
+                self.eval_binary_expression(&left, &operator, expression)?
+            }
+        };
+
+        let stored_val = self.get_current(identifier)?;
+        if std::mem::discriminant(&stored_val) == std::mem::discriminant(&value) {
+            self.assign_current(identifier, &value)
+        } else {
+            return Err(EvalError::InvalidAssignOperation {
+                identifier: identifier.to_string(),
+                operator,
+                stored_val,
+                expression: expression.clone()
+            })
+        }
     }
 
     fn eval_if_stmt(

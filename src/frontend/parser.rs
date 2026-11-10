@@ -1,4 +1,6 @@
 
+use crate::frontend::AssignOp;
+
 use super::{
     BinaryOp,
     ConditionalOp,
@@ -114,11 +116,9 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::Return) => self.parse_return_stmt(),
             
             TokenKind::Identifier => {
-                if self.peek_kind() == Some(TokenKind::Equals) {
-                    println!("Directing to assignment stmt parser");
+                if self.peek_assign_operator().is_some() {
                     self.parse_assign_stmt()
                 } else {
-                    println!("Directing to expression parser");
                     Ok(Stmt::Expression(self.parse_expression()?))
                 }
             },
@@ -154,13 +154,14 @@ impl<'a> Parser<'a> {
     fn parse_assign_stmt(&mut self) -> Result<Stmt> {
         let identifier = self.expect_identifier()?; // Consume the identifier
 
-        self.expect(TokenKind::Equals)?;
-
+        let operator = self.expect_assign_operator()?;
+        
         let expression = self.parse_expression()?;
 
         Ok(
             Stmt::Assign {
                 identifier,
+                operator,
                 expression
             }
         )
@@ -751,6 +752,12 @@ impl<'a> Parser<'a> {
         Some(dt)
     }
 
+    fn take_assign_operator(&mut self) -> Option<AssignOp> {
+        let op = self.current_assign_operator()?;
+        self.advance().ok();
+        Some(op)
+    }
+
     fn current_prefix_operator(&self) -> Option<UnaryOp> {
         match self.current_kind()? {
             TokenKind::Plus => Some(UnaryOp::Plus),
@@ -762,12 +769,55 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn current_assign_operator(&self) -> Option<AssignOp> {
+        match self.current_kind()? {
+            TokenKind::Equals => Some(AssignOp::Assign),
+            TokenKind::PlusEquals => Some(AssignOp::AddAssign),
+            TokenKind::MinusEquals => Some(AssignOp::SubtractAssign),
+            _ => None
+        }
+    }
+
+    fn peek_assign_operator(&self) -> Option<AssignOp> {
+        match self.peek_kind()? {
+            TokenKind::Equals => Some(AssignOp::Assign),
+            TokenKind::PlusEquals => Some(AssignOp::AddAssign),
+            TokenKind::MinusEquals => Some(AssignOp::SubtractAssign),
+            _ => None
+        }
+    }
+
+    fn curr_is_assign_operator(&self) -> bool {
+        if self.current_assign_operator().is_some() {
+            return true
+        } else {
+            false
+        }
+    }
+
+    fn peek_is_assign_operator(&self) -> bool {
+        if self.peek_assign_operator().is_some() {
+            return true
+        } else {
+            false
+        }
+    }
+    
     /// Consume and return the data type if we got it.
     /// But throw an error if there is no data type currently
     fn expect_data_type(&mut self) -> Result<DataType> {
         self.take_data_type().ok_or_else(|| {
             ParseError::TokenExpected(
                 "Expected a data type (eg: int, float, sting)".to_string()
+            )
+        })
+    }
+
+    
+    fn expect_assign_operator(&mut self) -> Result<AssignOp> {
+        self.take_assign_operator().ok_or_else(|| {
+            ParseError::TokenExpected(
+                "Expected an assign operator (eg: =, +=, -=)".to_string()
             )
         })
     }

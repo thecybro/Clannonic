@@ -3,7 +3,7 @@ use std::{
     collections::HashMap, rc::Rc,
 };
 
-use crate::frontend::{BooleanVal, DataType, Expr, FunctionParameter, Stmt, UnaryFixity, UnaryOp};
+use crate::frontend::{AssignOp, BooleanVal, DataType, Expr, FunctionParameter, Stmt, UnaryFixity, UnaryOp};
 use crate::frontend::{BinaryOp, ConditionalOp};
 
 pub(super) type Result<T> = std::result::Result<T, EvalError>;
@@ -86,6 +86,12 @@ pub enum EvalError {
         operator: UnaryOp,
         operand: Box<Expr>,
         fixity: UnaryFixity
+    },
+    InvalidAssignOperation {
+        identifier: String,
+        operator: AssignOp,
+        stored_val: Value,
+        expression: Expr
     }
 }
 
