@@ -2,14 +2,15 @@
 use super::{
   Token,
   TokenKind,
-  DataType,
   BooleanVal,
   Keyword,
   LexedOutput,
   Span,
 };
 
-#[derive(Debug, Copy, Clone)]
+use crate::language::Type;
+
+#[derive(Debug, PartialEq)]
 pub enum LexError {
     InvalidCharacter {
         character: char,
@@ -116,7 +117,8 @@ impl<'a> Lexer<'a> {
     /// If the current character is whitespace, keep advancing to the next position
     fn skip_whitespace(&mut self) {
         while let Some(current) = self.current() {
-            if current.is_whitespace() {
+            if current.is_whitespace()
+            && !matches!(current, '\n' | '\r') {
                 self.advance()
             } else {
                 break
@@ -124,6 +126,39 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    // Skip anything irrelevant like line comments and whitespaces/newlines (for now)
+    fn skip_ignored(&mut self) {
+        loop {
+            while let Some(character) = self.current() {
+                if character.is_whitespace() {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+
+            if self.current() == Some('/')
+                && self.peek() == Some('/') {
+                    self.advance();
+                    self.advance();
+
+                    self.consume_line_comment();
+                    continue;
+            }
+            
+            break;
+        }
+    }
+    
+    fn consume_line_comment(&mut self) {
+        while let Some(character) = self.current() {
+            if matches!(character, '\n' | '\r') {
+                break;
+            }
+            self.advance();
+        }
+    }
+    
     fn is_next_whitespace(&self) -> bool {
         while let Some(next) = self.peek() {
             if next.is_whitespace() {
@@ -156,6 +191,7 @@ impl<'a> Lexer<'a> {
     fn keyword_or_identifier(&self, start: usize) -> TokenKind {
         match &self.source[start..self.position] {
             "let" => TokenKind::Keyword(Keyword::Let),
+            "mut" => TokenKind::Keyword(Keyword::Mut),
             "for" => TokenKind::Keyword(Keyword::For),
             "while" => TokenKind::Keyword(Keyword::While),
             "fn" => TokenKind::Keyword(Keyword::Fn),
@@ -163,10 +199,10 @@ impl<'a> Lexer<'a> {
             "else" => TokenKind::Keyword(Keyword::Else),
             "return" => TokenKind::Keyword(Keyword::Return),
 
-            "String" => TokenKind::Keyword(Keyword::DataType(DataType::String)),
-            "int" => TokenKind::Keyword(Keyword::DataType(DataType::Integer)),
-            "float" => TokenKind::Keyword(Keyword::DataType(DataType::Float)),
-            "bool" => TokenKind::Keyword(Keyword::DataType(DataType::Boolean)),
+            // "String" => TokenKind::Keyword(Keyword::Type(Type::String)),
+            "int" => TokenKind::Keyword(Keyword::Type(Type::Int)),
+            // "float" => TokenKind::Keyword(Keyword::Type(Type::Float)),
+            "bool" => TokenKind::Keyword(Keyword::Type(Type::Bool)),
             
             "true" => TokenKind::BooleanLiteral(BooleanVal::True),
             "false" => TokenKind::BooleanLiteral(BooleanVal::False),
@@ -229,34 +265,13 @@ impl<'a> Lexer<'a> {
         }})
     }
     
-    /// Keep consuming until we keep getting slashes, this will allow the which_slash()
-    /// function to determine whether we have consumed single, double or triple slashes
-    fn consume_slash(&mut self) {
-        while let Some(character) = self.current() {
-            match character {
-                '/' => self.advance(),
-                _ => break
-            }
-        }
-    }
-
-    /// Check whether we have consumed single, double or triple slashes
-    fn which_slash(&self, start: usize) -> TokenKind {
-        match &self.source[start..self.position] {
-            "/" => TokenKind::Slash,
-            "//" => TokenKind::DSlash,
-            "///" => TokenKind::TSlash,
-            _ => TokenKind::MSlash,
-        }
-    }
-    
     /// It returns the next token(struct) if it's available; whenever someone calls it
     /// Its callers dont have to think of whitespaces, raw characters or anything at all
     /// All they care about it that whenever they call it, they will get a valid token
     /// Or panic if the next character is an invalid token
     fn next_token(&mut self) -> Result<Token<'a>> {  
-        self.skip_whitespace();
-        
+        self.skip_ignored();
+
         let start = self.position;
 
         let Some(character) = self.current() else {
@@ -280,59 +295,31 @@ impl<'a> Lexer<'a> {
                 Ok(self.token(kind, start))
             },
             '=' => {
-                if let Some(next) = self.peek() {
-                    // If the next character is = too,
-                    // consume 2 characters and return == token.
-                    // 
-                    // If not, move just one position next and 
-                    // return = token
-                    if next == '=' {
-                        self.advance();
-                        self.advance();
-                        Ok(self.token(TokenKind::EqualsEquals, start))
-                    } else {
-                        self.advance();
-                        Ok(self.token(TokenKind::Equals, start))
-                    }
-                } else {
+                if self.peek() == Some('=') {
                     self.advance();
-                    Ok(self.token(TokenKind::Equals, start))
+                    self.advance();
+                    return Ok(self.token(TokenKind::EqualsEquals, start))
                 }
+                self.advance();
+                Ok(self.token(TokenKind::Equals, start))
             },
             '>' => {
-                if let Some(next) = self.peek() {
-                    // If we encountered just > then we consume it and return GreaterThan,
-                    // if we encountered >= we consume both and return GreaterOrEquals
-                    if next == '=' {
-                        self.advance();
-                        self.advance();
-                        Ok(self.token(TokenKind::GreaterOrEquals, start))
-                    } else {
-                        self.advance();
-                        Ok(self.token(TokenKind::GreaterThan, start))
-                    }
-                } else {
+                if self.peek() == Some('=') {
                     self.advance();
-                    Ok(self.token(TokenKind::GreaterThan, start))
+                    self.advance();
+                    return Ok(self.token(TokenKind::GreaterOrEquals, start))
                 }
+                self.advance();
+                Ok(self.token(TokenKind::GreaterThan, start))
             },
             '<' => {
-                if let Some(next) = self.peek() {
-                    // If we encountered just one < then we consume it
-                    // and return LessThan but if we encountered <= we consume
-                    // both and return LessOrEquals
-                    if next == '=' {
-                        self.advance();
-                        self.advance();
-                        Ok(self.token(TokenKind::LessOrEquals, start))
-                    } else {
-                        self.advance();
-                        Ok(self.token(TokenKind::LessThan, start))
-                    }
-                } else {
+                if self.peek() == Some('=') {
                     self.advance();
-                    Ok(self.token(TokenKind::LessThan, start))
+                    self.advance();
+                    return Ok(self.token(TokenKind::LessOrEquals, start))
                 }
+                self.advance();
+                Ok(self.token(TokenKind::LessThan, start))
             }
             ')' => {
                 self.advance();
@@ -352,11 +339,11 @@ impl<'a> Lexer<'a> {
             },
             ';' => {
                 self.advance();
-                Ok(self.token(TokenKind::SemCol, start))
+                Ok(self.token(TokenKind::SemiColon, start))
             },
             ':' => {
                 self.advance();
-                Ok(self.token(TokenKind::Col, start))
+                Ok(self.token(TokenKind::Colon, start))
             },
             ',' => {
                 self.advance();
@@ -367,19 +354,13 @@ impl<'a> Lexer<'a> {
                 Ok(self.token(TokenKind::Dot, start))
             },
             '!' => {
-                if let Some(next) = self.peek() {
-                    if next == '=' {
-                        self.advance();
-                        self.advance();
-                        Ok(self.token(TokenKind::NotEquals, start))
-                    } else {
-                        self.advance();
-                        Ok(self.token(TokenKind::Not, start))
-                    }
-                } else {
+                if self.peek() == Some('=') {
                     self.advance();
-                    Ok(self.token(TokenKind::Not, start))
+                    self.advance();
+                    return Ok(self.token(TokenKind::NotEquals, start))
                 }
+                self.advance();
+                Ok(self.token(TokenKind::Not, start))
             },
             '"' => {
                 // Consume the detected double quote and let it consume
@@ -434,11 +415,18 @@ impl<'a> Lexer<'a> {
                 Ok(self.token(TokenKind::Star, start))
             },
             '/' => {
-              self.consume_slash();
-                Ok(self.token(
-                        self.which_slash(start),
-                        start
-                )) 
+              self.advance();
+              Ok(self.token(TokenKind::Slash, start))
+            },
+            '|' if self.peek() == Some('|') => {
+                self.advance();
+                self.advance();
+                return Ok(self.token(TokenKind::OrOr, start))
+            },
+            '&' if self.peek() == Some('&') => {
+                self.advance();
+                self.advance();
+                return Ok(self.token(TokenKind::AndAnd, start))
             },
             _ => return Err(LexError::InvalidCharacter { 
                 character, 
@@ -456,14 +444,22 @@ impl<'a> Lexer<'a> {
 impl<'a> Lexer<'a> {
     /// Automatically get the LexedOutput instead of having to manually
     /// loop and store the value in a variable etc
-    pub fn get_lexed(&mut self) -> LexedOutput<'a> {
-        let mut tokens = vec![];
+    pub fn lex(&mut self) -> Result<LexedOutput<'a>> {
+        let mut tokens = Vec::new();
 
-        for token in self {
+        loop {
+            let token = self.next_token()?;
+
+            if token.kind == TokenKind::Eof {
+                break;
+            }
+
             tokens.push(token)
         }
 
-        LexedOutput { tokens: tokens.into_boxed_slice() }
+        Ok(LexedOutput { 
+            tokens: tokens.into_boxed_slice() 
+        })
     }
 }
 

@@ -1,11 +1,14 @@
 
-use crate::frontend::AssignOp;
 
-use super::{
+use crate::language::{
     BinaryOp,
     ConditionalOp,
     UnaryOp,
     UnaryFixity,
+    AssignOp,
+    Type,
+};
+use super::{
     Expr,
     FunctionParameter,
     Keyword,
@@ -14,7 +17,6 @@ use super::{
     Stmt,
     Token,
     TokenKind,
-    DataType,
     BooleanVal,
 };
 
@@ -28,7 +30,7 @@ pub struct Parser<'a> {
 pub enum ParseError {
     Eof,
     InvalidToken(String),
-    InvalidDataType(String),
+    Type(String),
     // UnexpectedToken(String),
     TokenExpected(String),
     NotAKeyword(String),
@@ -122,6 +124,7 @@ impl<'a> Parser<'a> {
                     Ok(Stmt::Expression(self.parse_expression()?))
                 }
             },
+
             _ => {
                 let curr_lexeme = self.curr_lexeme()?;
                 return Err(ParseError::KeywordNotSupported(
@@ -130,20 +133,32 @@ impl<'a> Parser<'a> {
             }
         }
     }
-
+    
     /// Parse the statement if it starts with let
     fn parse_let_stmt(&mut self) -> Result<Stmt> {  
-        // self.advance()?; // consume the let token
         self.expect_keyword(Keyword::Let)?;
-        
-        let identifier = self.expect_identifier()?;
 
+        let mut mutable = false;
+        if self.take_if(TokenKind::Keyword(Keyword::Mut)) {
+            mutable = true
+        }
+        let identifier = self.expect_identifier()?;
+        
+        let mut annotation = None;
+        if self.take_if(TokenKind::Colon) {
+            annotation = Some(self.expect_type()?)
+        }
+        
         self.expect(TokenKind::Equals)?;
 
         let expression = self.parse_expression()?;
 
+        self.expect(TokenKind::SemiColon)?;
+        
         Ok(Stmt::Let {
             identifier,
+            mutable,
+            annotation,
             expression,
         })
         
@@ -158,6 +173,8 @@ impl<'a> Parser<'a> {
         
         let expression = self.parse_expression()?;
 
+        self.expect(TokenKind::SemiColon)?;
+        
         Ok(
             Stmt::Assign {
                 identifier,
@@ -203,9 +220,9 @@ impl<'a> Parser<'a> {
 
         let parameters = self.parse_comma_separated(|parser| {
             let name = parser.expect_identifier()?;
-            parser.expect(TokenKind::Col)?;
+            parser.expect(TokenKind::Colon)?;
 
-            let data_type = parser.expect_data_type()?;
+            let data_type = parser.expect_type()?;
 
             Ok(FunctionParameter {
                 name,
@@ -213,14 +230,13 @@ impl<'a> Parser<'a> {
             })
         })?.into_boxed_slice();
         
-        let mut return_type = None;        
+        let mut return_type = Type::Unit;
         if self.take_if(TokenKind::Arrow) {
-            return_type = Some(self.expect_data_type()?);
+            return_type = self.expect_type()?;
         }
         
         self.expect(TokenKind::LBrace)?;
 
-        let mut return_expr = None;
         let mut body = Vec::new();
 
         while !self.at(TokenKind::RBrace) {
@@ -228,11 +244,6 @@ impl<'a> Parser<'a> {
                 return Err(ParseError::TokenExpected(
                     "Expected '}' before end of file!".to_string()
                 ));
-            }
-
-            if self.take_if(TokenKind::Keyword(Keyword::Return)) {
-                return_expr = Some(self.parse_expression()?);
-                continue;
             }
 
             body.push(self.parse_statement()?);
@@ -245,7 +256,6 @@ impl<'a> Parser<'a> {
                 name,
                 parameters,
                 return_type,
-                return_expr,
                 body: body.into_boxed_slice()
             }
         )
@@ -254,8 +264,12 @@ impl<'a> Parser<'a> {
     fn parse_return_stmt(&mut self) -> Result<Stmt> {
         self.expect(TokenKind::Keyword(Keyword::Return))?;
 
+        let value = self.parse_expression()?;
+
+        self.expect(TokenKind::SemiColon)?;
+        
         Ok(
-            Stmt::Return(self.parse_expression()?)
+            Stmt::Return(Some(value))
         )
     }
 }
@@ -738,16 +752,16 @@ impl<'a> Parser<'a> {
     }
 
     /// Keyword data type means int, float etc
-    fn current_data_type(&self) -> Option<DataType> {
+    fn current_type(&self) -> Option<Type> {
         match self.current_kind()? {
-            TokenKind::Keyword(Keyword::DataType(data_type)) => Some(data_type),
+            TokenKind::Keyword(Keyword::Type(_type)) => Some(_type),
             _ => None
         }
     }
 
     /// Consume the data type if present
-    fn take_data_type(&mut self) -> Option<DataType> {
-        let dt = self.current_data_type()?;
+    fn take_type(&mut self) -> Option<Type> {
+        let dt = self.current_type()?;
         self.advance().ok();
         Some(dt)
     }
@@ -805,8 +819,8 @@ impl<'a> Parser<'a> {
     
     /// Consume and return the data type if we got it.
     /// But throw an error if there is no data type currently
-    fn expect_data_type(&mut self) -> Result<DataType> {
-        self.take_data_type().ok_or_else(|| {
+    fn expect_type(&mut self) -> Result<Type> {
+        self.take_type().ok_or_else(|| {
             ParseError::TokenExpected(
                 "Expected a data type (eg: int, float, sting)".to_string()
             )

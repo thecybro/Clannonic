@@ -2,12 +2,25 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use crate::language::{
+    AssignOp, 
+    BinaryOp, 
+    ConditionalOp, 
+    UnaryFixity, 
+    UnaryOp,
+    Type, 
+};
 use crate::frontend::{
-    AssignOp, BinaryOp, BooleanVal, ConditionalOp, DataType, Expr, FunctionParameter, Program, Stmt, UnaryFixity, UnaryOp,
+    Expr, 
+    FunctionParameter, 
+    Program, 
+    Stmt, 
+    BooleanVal,
 };
 
 use super::{
     Value,
+    Flow,
     Environment,
     EnvId,
 
@@ -201,20 +214,20 @@ impl Interpreter {
     fn eval_stmt(
         &mut self,
         stmt: &Stmt
-    ) -> Result<()> {
+    ) -> Result<Flow> {
         
         match stmt {
             // Let statement declares an identifier and throws an error if it already
             // exists in the current environment
-            Stmt::Let { identifier, expression } => {
-                let _ = self.eval_let_stmt(identifier.to_string(), expression)?;
-                Ok(())
+            Stmt::Let { identifier, mutable, annotation, expression } => {
+                self.eval_let_stmt(identifier.to_string(), expression)?;
+                Ok(Flow::Continue)
             },
             // Assign statement replaces the identifier's value stored on the available
             // environment, but throws an error if it doesn't exist
             Stmt::Assign { identifier, operator, expression } => {
-                let _ = self.eval_assign_stmt(identifier, *operator, expression)?;
-                Ok(())
+                self.eval_assign_stmt(identifier, *operator, expression)?;
+                Ok(Flow::Continue)
             }
             Stmt::If { condition, body } => {
                 self.eval_if_stmt(condition, body)
@@ -222,23 +235,37 @@ impl Interpreter {
             Stmt::While { condition, body } => {
                 self.eval_while_stmt(condition, body)
             },
-            Stmt::Fn { name, parameters, return_type, return_expr, body } => {
+            Stmt::Fn { name, parameters, return_type, body } => {
                 // Evaluation of function statement registers it
                 // 
                 // Evaluation of function call expression executes it
-                self.eval_function_stmt(name, parameters, return_type, return_expr, body)
+                self.eval_function_stmt(name, parameters, *return_type, body)?;
+                Ok(Flow::Continue)
             },
-            Stmt::Return(expr) => {
-                let _ = self.eval_expression(expr)?;
-                Ok(())
+            Stmt::Return(expression) => {
+                let value = self.eval_return_stmt(expression)?;
+                Ok(Flow::Return(value))
             },
             Stmt::Expression(expr)  => {
-                let _ = self.eval_expression(expr)?;
-                Ok(())
-            }
+                self.eval_expression(expr)?;
+                Ok(Flow::Continue)
+            },
         }
     }
 
+    fn eval_block(&mut self, body: &[Stmt]) -> Result<Flow> {
+        for stmt in body {
+            match self.eval_stmt(stmt)? {
+                Flow::Continue => {},
+                Flow::Return(value) => {
+                    return Ok(Flow::Return(value));
+                }   
+            }
+        }
+
+        Ok(Flow::Continue)
+    }
+    
     fn eval_let_stmt(
         &mut self,
         identifier: String,
@@ -250,6 +277,17 @@ impl Interpreter {
         self.define_current(identifier, value)
     }
 
+    fn eval_return_stmt(
+        &mut self,
+        expression: &Option<Expr>
+    ) -> Result<Value> {
+        if let Some(expr) = expression {
+            return self.eval_expression(expr)
+        } else {
+            Ok(Value::Unit)
+        }
+    }
+    
     /// Assign value to the stored identifier/value only if it matches the types
     /// If the value being attempted to assign to the stored identifier doesnot match;
     /// we throw an error
@@ -263,62 +301,53 @@ impl Interpreter {
         let value = match operator {
             AssignOp::Assign => {self.eval_expression(expression)?}
 
-            AssignOp::AddAssign => {
+            AssignOp::AddAssign | AssignOp::SubtractAssign => {
                 let left = Expr::Identifier(identifier.to_string());
-                let operator = BinaryOp::Add;
 
-                self.eval_binary_expression(&left, &operator, expression)?
-            }
+                let binary_operator = match operator {
+                    AssignOp::AddAssign => BinaryOp::Add,
+                    AssignOp::SubtractAssign => BinaryOp::Subtract,
+                    AssignOp::Assign => unreachable!(),
+                };
 
-            AssignOp::SubtractAssign => {
-                let left = Expr::Identifier(identifier.to_string());
-                let operator = BinaryOp::Subtract;
-
-                self.eval_binary_expression(&left, &operator, expression)?
+                self.eval_binary_expression(
+                    &left,
+                    &binary_operator,
+                    expression
+                )?
             }
         };
-
-        let stored_val = self.get_current(identifier)?;
-        if std::mem::discriminant(&stored_val) == std::mem::discriminant(&value) {
-            self.assign_current(identifier, &value)
-        } else {
-            return Err(EvalError::InvalidAssignOperation {
-                identifier: identifier.to_string(),
-                operator,
-                stored_val,
-                expression: expression.clone()
-            })
-        }
+        self.assign_current(identifier, &value)
     }
 
     fn eval_if_stmt(
         &mut self,
         condition: &Expr,
         body: &Box<[Stmt]>
-    ) -> Result<()> {
+    ) -> Result<Flow> {
 
         if self.eval_expression(condition)? == Value::Boolean(BooleanVal::True) {
-            for stmt in body.iter() {
-                self.eval_stmt(&stmt)?
-            }
+            self.eval_block(body)
+        } else {
+            Ok(Flow::Continue)
         }
-        
-        Ok(())
     }
 
     fn eval_while_stmt(
         &mut self,
         condition: &Expr,
         body: &Box<[Stmt]>
-    ) -> Result<()> {
+    ) -> Result<Flow> {
 
         while self.eval_expression(condition)? == Value::Boolean(BooleanVal::True) {
-            for stmt in body.iter() {
-                self.eval_stmt(&stmt)?
+            match self.eval_block(body)? {
+                Flow::Continue => {},
+                Flow::Return(value) => {
+                    return Ok(Flow::Return(value));
+                }
             }
         }
-
-        Ok(())
+        Ok(Flow::Continue)
     }
 
     /// Evaluating a function statement means registering the
@@ -338,11 +367,9 @@ impl Interpreter {
         &mut self,
         name: &str,
         parameters: &Box<[FunctionParameter]>,
-        return_type: &Option<DataType>,
-        return_expr: &Option<Expr>,
+        return_type: Type,
         body: &Box<[Stmt]>
-    ) -> Result<()> {
-
+    ) -> Result<Value> {
         
         // These .clones() can be too expensive too quickly, so we gotta
         // replace it soon
@@ -350,7 +377,6 @@ impl Interpreter {
                 name: name.to_string(),
                 parameters: parameters.clone(),
                 return_type: return_type.clone(),
-                return_expr: return_expr.clone(),
                 body: body.clone(),
                 closure: self.current
             };
@@ -365,7 +391,7 @@ impl Interpreter {
         // println!("From interpreter/impl.rs line 317, function registry:\n");
         // println!("Just registered function, so interpreter:\n {self:#?}");
 
-        Ok(())
+        Ok(Value::Unit)
     }
     
     fn eval_expression(
@@ -399,6 +425,69 @@ impl Interpreter {
         }
     }
 
+    /// This is the actual function that evaluates/executes the function
+    /// when you call it by doing `let x = func_name()`
+    /// 
+    fn eval_function_call_expression(&mut self, name: &str, arguments: &Box<[Expr]>) -> Result<Value> {
+        // We would have the entire function body stored in value
+        // println!("From interpreter/impl.rs: line 457\n");
+        let value = self.get_current(name)?;
+
+        // println!("From interpreter/impl.rs: line 459\nGot {value}");
+        
+        match value {
+            Value::Function(func) => {
+                // The environment of the function would have the environment id
+                // of the caller and what the function had when it was registered
+                // which the closure captures.
+                // 
+                // Here, the closure is the parent environment of the function,
+                // which lets it access the values not passed by the caller but are
+                // accessible to it
+                let caller_env = self.current;
+                let func_call_env = self.create_env(Some(func.closure));
+
+                // We map each call site argument/identifier to the parameter the 
+                // called function expects; based on position
+                for (parameter, argument) in func.parameters.iter().zip(arguments.iter()) {
+                    let arg_val = self.eval_expression(argument)?;
+    
+                    self.define(
+                        // We define the arguments and their values from the callers environment
+                        // in the execution environment of the function
+                        func_call_env,
+                        parameter.name.clone(),
+                        arg_val
+                    )?;
+                }
+                
+                self.current = func_call_env;
+
+                let executed = self.eval_block(&func.body);
+
+                self.current = caller_env;
+
+                let flow = executed?;
+
+                let return_value = match flow {
+                    Flow::Return(value) => value,
+                    Flow::Continue => Value::Unit
+                };
+
+                Ok(return_value)
+            },
+            _ => {
+                return Err(
+                    EvalError::ExpressionNotCallable{
+                        error: format!("Given expression '{name}' is not callable"),
+                        value,
+                    }
+                )
+            }
+        }       
+        
+    }
+    
     fn eval_boolean_expression(
         &mut self,
         boolean_type: &BooleanVal
@@ -419,88 +508,30 @@ impl Interpreter {
         let left = self.eval_expression(left)?;
         let right = self.eval_expression(right)?;
 
-        match (left, right) {
-            (Value::Integer(left), Value::Integer(right)) => {
-                match operator {
-                    BinaryOp::Add => Ok(Value::Integer(left + right)),
-                    BinaryOp::Subtract => Ok(Value::Integer(left - right)),
-                    BinaryOp::Multiply => Ok(Value::Integer(left * right)),
-                    BinaryOp::Divide => {
-                        if right == 0 {
-                            return Err(
-                                EvalError::InvalidBinaryOperation {
-                                    left: Value::Integer(left),
-                                    operator: BinaryOp::Divide,
-                                    right: Value::Integer(right)
-                                }
-                            )
-                        }
-
-                        Ok(Value::Integer(left / right))
-                    },
-                }
+        match (left, operator, right) {
+            (Value::Integer(left), BinaryOp::Add, Value::Integer(right)) => {
+                Ok(Value::Integer(left + right))
             },
-            (Value::Float(left), Value::Float(right)) => {
-                match operator {
-                    BinaryOp::Add => Ok(Value::Float(left + right)),
-                    BinaryOp::Subtract => Ok(Value::Float(left - right)),
-                    BinaryOp::Multiply => Ok(Value::Float(left * right)),
-                    BinaryOp::Divide => {
-                        if right == 0.0 {
-                            return Err(
-                                EvalError::InvalidBinaryOperation {
-                                    left: Value::Float(left),
-                                    operator: BinaryOp::Divide,
-                                    right: Value::Float(right)
-                                }
-                            )
-                        }
-
-                        Ok(Value::Float(left / right))
-                    },
-                }
+            (Value::Integer(left), BinaryOp::Subtract, Value::Integer(right)) => {
+                Ok(Value::Integer(left - right))
             },
-            (Value::Integer(left), Value::Float(right)) => {
-                match operator {
-                    BinaryOp::Add => Ok(Value::Float(left as f64 + right)),
-                    BinaryOp::Subtract => Ok(Value::Float(left as f64 - right)),
-                    BinaryOp::Multiply => Ok(Value::Float(left as f64 * right)),
-                    BinaryOp::Divide => {
-                        if right == 0.0 {
-                            return Err(
-                                EvalError::InvalidBinaryOperation {
-                                    left: Value::Integer(left),
-                                    operator: BinaryOp::Divide,
-                                    right: Value::Float(right)
-                                }
-                            )
-                        }
-
-                        Ok(Value::Float(left as f64 / right))
-                    },
-                }
+            (Value::Integer(left), BinaryOp::Multiply, Value::Integer(right)) => {
+                Ok(Value::Integer(left * right))
             },
-            (Value::Float(left), Value::Integer(right)) => {
-                match operator {
-                    BinaryOp::Add => Ok(Value::Float(left + right as f64)),
-                    BinaryOp::Subtract => Ok(Value::Float(left - right as f64)),
-                    BinaryOp::Multiply => Ok(Value::Float(left * right as f64)),
-                    BinaryOp::Divide => {
-                        if right == 0 {
-                            return Err(
-                                EvalError::InvalidBinaryOperation {
-                                    left: Value::Float(left),
-                                    operator: BinaryOp::Divide,
-                                    right: Value::Integer(right)
-                                }
-                            )
+            (Value::Integer(left), BinaryOp::Divide, Value::Integer(right)) => {
+                if right == 0 {
+                    return Err(
+                        EvalError::InvalidBinaryOperation {
+                            left: Value::Integer(left),
+                            operator: BinaryOp::Divide,
+                            right: Value::Integer(right)
                         }
-
-                        Ok(Value::Float(left / right as f64))
-                    },
+                    )
                 }
+
+                Ok(Value::Integer(left / right))
             },
-            (left, right) => {
+            (left, _, right) => {
                 Err(
                     EvalError::InvalidBinaryOperation {
                         left,
@@ -703,111 +734,6 @@ impl Interpreter {
                 )
             }
         }
-    }
-
-    /// This is the actual function that evaluates/executes the function
-    /// when you call it by doing `let x = func_name()`
-    /// 
-    fn eval_function_call_expression(&mut self, name: &str, arguments: &Box<[Expr]>) -> Result<Value> {
-        // We would have the entire function body stored in value
-        // println!("From interpreter/impl.rs: line 457\n");
-        let value = self.get_current(name)?;
-
-        // println!("From interpreter/impl.rs: line 459\nGot {value}");
-        
-        match value {
-            Value::Function(func) => {
-                // The environment of the function would have the environment id
-                // of the caller and what the function had when it was registered
-                // which the closure captures.
-                // 
-                // Here, the closure is the parent environment of the function,
-                // which lets it access the values not passed by the caller but are
-                // accessible to it
-                let caller_env = self.current;
-                let func_call_env = self.create_env(Some(func.closure));
-
-                // We map each call site argument/identifier to the parameter the 
-                // called function expects; based on position
-                for (parameter, argument) in func.parameters.iter().zip(arguments.iter()) {
-                    let arg_val = self.eval_expression(argument)?;
-    
-                    self.define(
-                        // We define the arguments and their values from the callers environment
-                        // in the execution environment of the function
-                        func_call_env,
-                        parameter.name.clone(),
-                        arg_val
-                    )?;
-                }
-                
-                self.current = func_call_env;
-
-                let result = if let Some(return_type) = func.return_type {
-                    if let Some(return_expr) = func.return_expr.as_ref() {
-                        for stmt in func.body.iter() {
-                            self.eval_stmt(stmt)?;
-                        }
-                        let value = self.eval_expression(return_expr)?;
-        
-                        match value {
-                            Value::Integer(_) => {
-                                if return_type != DataType::Integer {
-                                    return Err(
-                                        EvalError::InvalidReturnType(value)
-                                    )
-                                }
-                            },
-                            Value::Float(_) => {
-                                if return_type != DataType::Float {
-                                    return Err(
-                                        EvalError::InvalidReturnType(value)
-                                    )
-                                }
-                            },
-                            Value::String(_) => {
-                                if return_type != DataType::String {
-                                    return Err(
-                                        EvalError::InvalidReturnType(value)
-                                    )
-                                }
-                            },
-                            Value::Boolean(_) => {
-                                if return_type != DataType::Boolean {
-                                    return Err(
-                                        EvalError::InvalidReturnType(value)
-                                    )
-                                }
-                            },
-                            _ => return Err(
-                                EvalError::InvalidReturnType(value)
-                            )
-                        }
-                    
-                        value
-                    } else {
-                        Value::Null
-                    }
-                } else {
-                    Value::Null
-                };
-
-                // Set the current execution environment back to the one
-                // that the caller had in the time of calling
-                self.current = caller_env;
-                
-                return Ok(result)
-            },
-            _ => {
-                return Err(
-                    EvalError::ExpressionNotCallable{
-                        error: format!("Given expression '{name}' is not callable"),
-                        value,
-                    }
-                )
-            }
-        }       
-        
     }
 }
 

@@ -11,15 +11,18 @@
 //!
 
 mod frontend;
-mod interpreter;
-mod runtime;
+mod backends;
+mod language;
 
 use frontend::Lexer;
 use frontend::{Parser, ParseError};
-use interpreter::{Interpreter, EvalError};
+use backends::{Interpreter, EvalError};
+
+use crate::frontend::LexError;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
+    LexError(LexError),
     ParseError(ParseError),
     EvaluateError(EvalError),
 }
@@ -36,12 +39,18 @@ impl From<EvalError> for Error {
     }
 }
 
+impl From<LexError> for Error {
+    fn from(err: LexError) -> Self {
+        Error::LexError(err)
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// A simple glue for the lexer and parser (and Interpreter/code generator later)
 /// which calls and takes return value from one and gives it to other
 pub fn run(source: &str) -> Result<()> {
-    let tokens = Lexer::new(&source).get_lexed();
+    let tokens = Lexer::new(&source).lex()?;
     // println!("{tokens:#?}");
 
     let parsed = Parser::new(tokens).parse()?;
