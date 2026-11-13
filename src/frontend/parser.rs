@@ -22,7 +22,7 @@ use super::{
 
 #[derive(Debug)]
 pub struct Parser<'a> {
-    tokens: Vec<Token<'a>>,
+    tokens: Box<[Token<'a>]>,
     position: usize,
 }
 
@@ -51,7 +51,7 @@ impl<'a> Parser<'a> {
     /// Initialize the parser
     pub fn new(output: LexedOutput<'a>) -> Self {
         Self {
-            tokens: output.tokens.to_vec(),
+            tokens: output.tokens,
             position: 0
         }
     }

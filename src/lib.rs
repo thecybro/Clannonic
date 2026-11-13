@@ -13,17 +13,19 @@
 mod frontend;
 mod backends;
 mod language;
+mod semantic;
 
-use frontend::Lexer;
-use frontend::{Parser, ParseError};
-use backends::{Interpreter, EvalError};
+use language::*;
+use semantic::*;
+use frontend::*;
+use backends::*;
 
-use crate::frontend::LexError;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
     LexError(LexError),
     ParseError(ParseError),
+    TypeError(TypeError),
     EvaluateError(EvalError),
 }
 
@@ -45,6 +47,12 @@ impl From<LexError> for Error {
     }
 }
 
+impl From<TypeError> for Error {
+    fn from(err: TypeError) -> Self {
+        Error::TypeError(err)
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// A simple glue for the lexer and parser (and Interpreter/code generator later)
@@ -55,10 +63,12 @@ pub fn run(source: &str) -> Result<()> {
 
     let parsed = Parser::new(tokens).parse()?;
     // println!("{parsed:#?}");
-    
-    let result = Interpreter::new().evaluate(&parsed);
 
-    println!("{result:#?}");
+    let checked = TypeChecker::new().check_program(&parsed)?;
+    
+    // let result = Interpreter::new().evaluate(&parsed);
+
+    // println!("{result:#?}");
 
     Ok(())
 }
