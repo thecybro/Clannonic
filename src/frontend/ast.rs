@@ -78,6 +78,8 @@ pub enum Expr {
     /// 
     /// let x = main()
     /// ```
+    /// 
+    /// Here, the expression is the main() part, whereas the whole line is a let statement
     FunctionCall {
         name: String,
         arguments: Box<[Expr]>,
@@ -118,7 +120,7 @@ pub enum Stmt {
     ///     // implementation
     /// }
     /// ```
-    Fn {
+    Function {
         name: String,
         parameters: Box<[FunctionParameter]>,
         return_type: Type,

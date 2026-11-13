@@ -252,7 +252,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RBrace)?;
         
         Ok(
-            Stmt::Fn {
+            Stmt::Function {
                 name,
                 parameters,
                 return_type,

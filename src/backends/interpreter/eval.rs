@@ -235,7 +235,7 @@ impl Interpreter {
             Stmt::While { condition, body } => {
                 self.eval_while_stmt(condition, body)
             },
-            Stmt::Fn { name, parameters, return_type, body } => {
+            Stmt::Function { name, parameters, return_type, body } => {
                 // Evaluation of function statement registers it
                 // 
                 // Evaluation of function call expression executes it

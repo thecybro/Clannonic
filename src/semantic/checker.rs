@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 
-use crate::{Expr, Program, Stmt, Type, frontend::FunctionParameter};
+use crate::{Expr, Program, Stmt, Type, BinaryOp, FunctionParameter};
 
 use super::{Result, TypeError, TypeEnvironment, Binding};
 
@@ -88,6 +88,12 @@ impl TypeChecker {
 
             Expr::FunctionCall { name, arguments } => self.check_function_call_expression(name, arguments),
             
+            Expr::Binary { 
+                left, 
+                operator, 
+                right 
+            } => self.check_binary_expression(left, *operator, right),
+
             _ => todo!()
         }
     }
@@ -210,6 +216,37 @@ impl TypeChecker {
         };
         
         Ok(function.return_type)
+    }
+
+    fn check_binary_expression(
+        &mut self,
+        left: &Expr,
+        operator: BinaryOp,
+        right: &Expr
+    ) -> Result<Type> {
+
+        let left_type = self.check_expression(left)?;
+        let right_type = self.check_expression(right)?;
+
+        // It is a valid binary operation only if we are apply the binary operators
+        // where the lhs and rhs are same (yet to write the checks for other operators)
+        match (left_type, operator, right_type) {
+            (Type::Int, BinaryOp::Add, Type::Int)
+            | (Type::Int, BinaryOp::Subtract, Type::Int)
+            | (Type::Int, BinaryOp::Multiply, Type::Int)
+            | (Type::Int, BinaryOp::Divide, Type::Int)
+            => {
+                println!("The return statement is a valid binary operation");
+                Ok(Type::Int)
+            },
+            (left, operator, right) => {
+                return Err(TypeError::InvalidBinaryOperation {
+                    left,
+                    operator: operator,
+                    right,
+                })
+            }
+        }        
     }
 }
 
