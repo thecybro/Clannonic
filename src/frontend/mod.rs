@@ -33,7 +33,7 @@ pub struct LexedOutput<'a> {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     // This will allow us to return other stuff as part of the program
     // which are not the part of the ast itself
