@@ -1,6 +1,6 @@
 
 use crate::language::{
-    BinaryOp,
+    ArithmeticOp,
     ComparisonOp,
     UnaryOp,
     UnaryFixity,
@@ -26,9 +26,9 @@ pub enum EvalError {
         error: String,
         value: Value,
     },
-    InvalidBinaryOperation {
+    InvalidArithmeticOperation {
         left: Value,
-        operator: BinaryOp,
+        operator: ArithmeticOp,
         right: Value
     },
     InvalidComparisonOperation {

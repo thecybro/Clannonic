@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use crate::language::{
     AssignOp, 
-    BinaryOp, 
+    ArithmeticOp, 
     ComparisonOp, 
     UnaryFixity, 
     UnaryOp,
@@ -58,9 +58,21 @@ impl Interpreter {
         &mut self,
         program: &Program,
     ) -> Result<()> {
+
+        // First register all the functions
+        // Here, since the current id is the same as globals,
+        // the call to define_current() will get you global id
+        // So stuff would be saved in global as well
+        for stmt in program.ast.iter() {
+            let _ = self.eval_function_signatures(&stmt)?;
+        }
         
         for stmt in program.ast.iter() {
-            let _ = self.eval_stmt(&stmt)?;
+            match stmt {
+                Stmt::Function{ .. } => {},
+                _ => {let _ = self.eval_stmt(&stmt)?;}
+            }
+            // let _ = self.eval_stmt(&stmt)?;
         }
 
         Ok(())
@@ -188,12 +200,24 @@ impl Interpreter {
         self.define(self.current, name, value)
     }
 
+    fn define_global(&mut self, name: String, value: Value) -> Result<Value> {
+        self.define(self.globals, name, value)
+    }
+
     fn get_current(&self, name: &str) -> Result<Value> {
         self.get(self.current, name)
     }
 
+    fn get_global(&self, name: &str) -> Result<Value> {
+        self.get(self.globals, name)
+    }
+
     fn assign_current(&mut self, name: &str, value: &Value) -> Result<Value> {
         self.assign(self.current, name, value)
+    }
+
+    fn assign_globals(&mut self, name: &str, value: &Value) -> Result<Value> {
+        self.assign(self.globals, name, value)
     }
 
     fn get_parent(&self) -> Option<EnvId> {
@@ -253,6 +277,26 @@ impl Interpreter {
         }
     }
 
+    fn eval_function_signatures(
+        &mut self,
+        stmt: &Stmt,
+    ) -> Result<Flow> {
+
+        match stmt {
+            Stmt::Function {
+                name,
+                parameters,
+                return_type,
+                body,
+            } => {
+                self.eval_function_stmt(name, parameters, *return_type, body)?;
+            },
+            _ => {}
+        }
+
+        Ok(Flow::Continue)
+    }
+    
     fn eval_block(&mut self, body: &[Stmt]) -> Result<Flow> {
         for stmt in body {
             match self.eval_stmt(stmt)? {
@@ -304,15 +348,15 @@ impl Interpreter {
             AssignOp::AddAssign | AssignOp::SubtractAssign => {
                 let left = Expr::Identifier(identifier.to_string());
 
-                let binary_operator = match operator {
-                    AssignOp::AddAssign => BinaryOp::Add,
-                    AssignOp::SubtractAssign => BinaryOp::Subtract,
+                let arithmetic_operator = match operator {
+                    AssignOp::AddAssign => ArithmeticOp::Add,
+                    AssignOp::SubtractAssign => ArithmeticOp::Subtract,
                     AssignOp::Assign => unreachable!(),
                 };
 
-                self.eval_binary_expression(
+                self.eval_arithmetic_expression(
                     &left,
-                    &binary_operator,
+                    &arithmetic_operator,
                     expression
                 )?
             }
@@ -381,7 +425,6 @@ impl Interpreter {
                 closure: self.current
             };
 
-        
         let value = Value::Function(Rc::new(function));
         self.define_current(
             name.to_string(),
@@ -410,11 +453,11 @@ impl Interpreter {
             Expr::Boolean(boolean_type) => {
                 self.eval_boolean_expression(boolean_type)
             }
-            Expr::Binary { left, operator, right } => {
-                self.eval_binary_expression(left, operator, right)
+            Expr::Arithmetic { left, operator, right } => {
+                self.eval_arithmetic_expression(left, operator, right)
             }
-            Expr::Conditional { left, operator, right } => {
-                self.eval_conditional_expression(left, operator, right)
+            Expr::Comparison { left, operator, right } => {
+                self.eval_comparison_expression(left, operator, right)
             },
             Expr::Unary { operator, operand, fixity } => {
                 self.eval_unary_expression(operator, operand, *fixity)
@@ -498,10 +541,10 @@ impl Interpreter {
         }
     }
     
-    fn eval_binary_expression(
+    fn eval_arithmetic_expression(
         &mut self,
         left: &Expr,
-        operator: &BinaryOp,
+        operator: &ArithmeticOp,
         right: &Expr 
     ) -> Result<Value> {
 
@@ -509,21 +552,21 @@ impl Interpreter {
         let right = self.eval_expression(right)?;
 
         match (left, operator, right) {
-            (Value::Integer(left), BinaryOp::Add, Value::Integer(right)) => {
+            (Value::Integer(left), ArithmeticOp::Add, Value::Integer(right)) => {
                 Ok(Value::Integer(left + right))
             },
-            (Value::Integer(left), BinaryOp::Subtract, Value::Integer(right)) => {
+            (Value::Integer(left), ArithmeticOp::Subtract, Value::Integer(right)) => {
                 Ok(Value::Integer(left - right))
             },
-            (Value::Integer(left), BinaryOp::Multiply, Value::Integer(right)) => {
+            (Value::Integer(left), ArithmeticOp::Multiply, Value::Integer(right)) => {
                 Ok(Value::Integer(left * right))
             },
-            (Value::Integer(left), BinaryOp::Divide, Value::Integer(right)) => {
+            (Value::Integer(left), ArithmeticOp::Divide, Value::Integer(right)) => {
                 if right == 0 {
                     return Err(
-                        EvalError::InvalidBinaryOperation {
+                        EvalError::InvalidArithmeticOperation {
                             left: Value::Integer(left),
-                            operator: BinaryOp::Divide,
+                            operator: ArithmeticOp::Divide,
                             right: Value::Integer(right)
                         }
                     )
@@ -533,7 +576,7 @@ impl Interpreter {
             },
             (left, _, right) => {
                 Err(
-                    EvalError::InvalidBinaryOperation {
+                    EvalError::InvalidArithmeticOperation {
                         left,
                         operator: *operator,
                         right
@@ -577,7 +620,7 @@ impl Interpreter {
         }
     }
     
-    fn eval_conditional_expression(
+    fn eval_comparison_expression(
         &mut self,
         left: &Expr,
         operator: &ComparisonOp,
@@ -767,9 +810,9 @@ fn ok_evaluate_binary_expression_with_identifier() {
     // Define the variable "x" with 5.0
     let _ = interpreter.define_current("x".to_string(), Value::Integer(5));
 
-    let expression = Expr::Binary {
+    let expression = Expr::Arithmetic {
         left: Box::new(Expr::Identifier("x".to_string())),
-        operator: BinaryOp::Add,
+        operator: ArithmeticOp::Add,
         right: Box::new(Expr::Integer(10))
     };
 
@@ -788,26 +831,26 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
     // Define the variable "x" with "a_string"
     let _ = interpreter.define_current("x".to_string(), Value::String("a_string".to_string()));
 
-    let expression = Expr::Binary {
+    let expression = Expr::Arithmetic {
         left: Box::new(Expr::Identifier("x".to_string())),
-        operator: BinaryOp::Add,
+        operator: ArithmeticOp::Add,
         right: Box::new(Expr::Integer(10))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression),
         Err(
-            EvalError::InvalidBinaryOperation {
+            EvalError::InvalidArithmeticOperation {
                 left: Value::String("a_string".to_string()),
-                operator: BinaryOp::Add,
+                operator: ArithmeticOp::Add,
                 right: Value::Integer(10)
             }
         )
     );
 
-    let expression2 = Expr::Binary {
+    let expression2 = Expr::Arithmetic {
         left: Box::new(Expr::Identifier("y".to_string())),
-        operator: BinaryOp::Add,
+        operator: ArithmeticOp::Add,
         right: Box::new(Expr::Float(10.0))
     };
 
@@ -824,9 +867,9 @@ fn ok_evaluate_normal_binary_expression() {
     let mut interpreter = Interpreter::new();
 
     // 10 + 20 = 30
-    let expression1 = Expr::Binary {
+    let expression1 = Expr::Arithmetic {
         left: Box::new(Expr::Integer(10)),
-        operator: BinaryOp::Add,
+        operator: ArithmeticOp::Add,
         right: Box::new(Expr::Integer(20))
     };
     
@@ -836,9 +879,9 @@ fn ok_evaluate_normal_binary_expression() {
     );
 
     // 20.0 - 10.0 = 10.0
-    let expression2 = Expr::Binary {
+    let expression2 = Expr::Arithmetic {
         left: Box::new(Expr::Float(20.0)),
-        operator: BinaryOp::Subtract,
+        operator: ArithmeticOp::Subtract,
         right: Box::new(Expr::Float(10.0))
     };
 
@@ -848,9 +891,9 @@ fn ok_evaluate_normal_binary_expression() {
     );
 
     // 20 * 10 = 200
-    let expression3 = Expr::Binary {
+    let expression3 = Expr::Arithmetic {
         left: Box::new(Expr::Integer(20)),
-        operator: BinaryOp::Multiply,
+        operator: ArithmeticOp::Multiply,
         right: Box::new(Expr::Integer(10))
     };
 
@@ -860,9 +903,9 @@ fn ok_evaluate_normal_binary_expression() {
     );
 
     // 20.0 / 10.0 = 2.0
-    let expression4 = Expr::Binary {
+    let expression4 = Expr::Arithmetic {
         left: Box::new(Expr::Float(20.0)),
-        operator: BinaryOp::Divide,
+        operator: ArithmeticOp::Divide,
         right: Box::new(Expr::Float(10.0))
     };
 
@@ -877,17 +920,17 @@ fn ok_evaluate_normal_binary_expression() {
 fn err_evaluate_divide_by_zero() {
     let mut interpreter = Interpreter::new();
 
-    let expression1 = Expr::Binary{
+    let expression1 = Expr::Arithmetic{
         left: Box::new(Expr::Float(10.0)),
-        operator: BinaryOp::Divide,
+        operator: ArithmeticOp::Divide,
         right: Box::new(Expr::Float(0.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression1),
-        Err(EvalError::InvalidBinaryOperation {
+        Err(EvalError::InvalidArithmeticOperation {
             left: Value::Float(10.0),
-            operator: BinaryOp::Divide,
+            operator: ArithmeticOp::Divide,
             right: Value::Float(0.0)
         })
     );
@@ -898,65 +941,65 @@ fn err_evaluate_binary_expression_with_string() {
     let mut interpreter = Interpreter::new();
 
     // "something" + 20.0 = Err()
-    let expression1 = Expr::Binary {
+    let expression1 = Expr::Arithmetic {
         left: Box::new(Expr::String("something".to_string())),
-        operator: BinaryOp::Add,
+        operator: ArithmeticOp::Add,
         right: Box::new(Expr::Integer(20))
     };
     
     assert_eq!(
         interpreter.eval_expression(&expression1),
-        Err(EvalError::InvalidBinaryOperation {
+        Err(EvalError::InvalidArithmeticOperation {
             left: Value::String("something".to_string()),
-            operator: BinaryOp::Add,
+            operator: ArithmeticOp::Add,
             right: Value::Integer(20)
         })
     );
 
     // "something" - 20.0 = Err()
-    let expression2 = Expr::Binary {
+    let expression2 = Expr::Arithmetic {
         left: Box::new(Expr::String("something".to_string())),
-        operator: BinaryOp::Subtract,
+        operator: ArithmeticOp::Subtract,
         right: Box::new(Expr::Float(20.0))
     };
     
     assert_eq!(
         interpreter.eval_expression(&expression2),
-        Err(EvalError::InvalidBinaryOperation {
+        Err(EvalError::InvalidArithmeticOperation {
             left: Value::String("something".to_string()),
-            operator: BinaryOp::Subtract,
+            operator: ArithmeticOp::Subtract,
             right: Value::Float(20.0)
         })
     );
 
     // "something" * 20.0 = Err()
-    let expression3 = Expr::Binary {
+    let expression3 = Expr::Arithmetic {
         left: Box::new(Expr::String("something".to_string())),
-        operator: BinaryOp::Multiply,
+        operator: ArithmeticOp::Multiply,
         right: Box::new(Expr::Integer(20))
     };
     
     assert_eq!(
         interpreter.eval_expression(&expression3),
-        Err(EvalError::InvalidBinaryOperation {
+        Err(EvalError::InvalidArithmeticOperation {
             left: Value::String("something".to_string()),
-            operator: BinaryOp::Multiply,
+            operator: ArithmeticOp::Multiply,
             right: Value::Integer(20)
         })
     );
 
     // "something" / 20.0 = Err()
-    let expression4 = Expr::Binary {
+    let expression4 = Expr::Arithmetic {
         left: Box::new(Expr::String("something".to_string())),
-        operator: BinaryOp::Divide,
+        operator: ArithmeticOp::Divide,
         right: Box::new(Expr::Float(20.0))
     };
     
     assert_eq!(
         interpreter.eval_expression(&expression4),
-        Err(EvalError::InvalidBinaryOperation {
+        Err(EvalError::InvalidArithmeticOperation {
             left: Value::String("something".to_string()),
-            operator: BinaryOp::Divide,
+            operator: ArithmeticOp::Divide,
             right: Value::Float(20.0)
         })
     );
@@ -968,12 +1011,12 @@ fn err_evaluate_binary_expression_with_string() {
 fn ok_evaluate_normal_nested_binary_expression() {
     let mut interpreter = Interpreter::new();
 
-    let expression = Expr::Binary {
+    let expression = Expr::Arithmetic {
         left: Box::new(Expr::Integer(10)),
-        operator: BinaryOp::Add,
-        right: Box::new(Expr::Binary {
+        operator: ArithmeticOp::Add,
+        right: Box::new(Expr::Arithmetic {
             left: Box::new(Expr::Integer(20)),
-            operator: BinaryOp::Multiply,
+            operator: ArithmeticOp::Multiply,
             right: Box::new(Expr::Float(2.0))
         })
     };
@@ -988,21 +1031,21 @@ fn ok_evaluate_normal_nested_binary_expression() {
 fn err_evaluate_invalid_binary_expression() {
     let mut interpreter = Interpreter::new();
     
-    let expression = Expr::Binary {
+    let expression = Expr::Arithmetic {
         left: Box::new(Expr::Float(10.0)),
-        operator: BinaryOp::Add,
-        right: Box::new(Expr::Binary {
+        operator: ArithmeticOp::Add,
+        right: Box::new(Expr::Arithmetic {
             left: Box::new(Expr::Float(20.0)),
-            operator: BinaryOp::Multiply,
+            operator: ArithmeticOp::Multiply,
             right: Box::new(Expr::String("invalid".to_string()))
         })
     };
     
     assert_eq!(
         interpreter.eval_expression(&expression),
-        Err(EvalError::InvalidBinaryOperation {
+        Err(EvalError::InvalidArithmeticOperation {
             left: Value::Float(20.0),
-            operator: BinaryOp::Multiply,
+            operator: ArithmeticOp::Multiply,
             right: Value::String("invalid".to_string())
         })
     )
@@ -1094,9 +1137,9 @@ fn ok_evaluate_nested_binary_conditional_expression() {
         left: Box::new(Expr::Integer(10)),
         operator: ComparisonOp::IsEqualTo,
         right: Box::new(
-            Expr::Binary {
+            Expr::Arithmetic {
                 left: Box::new(Expr::Integer(5)),
-                operator: BinaryOp::Add,
+                operator: ArithmeticOp::Add,
                 right: Box::new(Expr::Float(5.0))
             }
         )
@@ -1112,9 +1155,9 @@ fn ok_evaluate_nested_binary_conditional_expression() {
         left: Box::new(Expr::Float(10.0)),
         operator: ComparisonOp::IsLessThan,
         right: Box::new(
-            Expr::Binary {
+            Expr::Arithmetic {
                 left: Box::new(Expr::Float(5.0)),
-                operator: BinaryOp::Add,
+                operator: ArithmeticOp::Add,
                 right: Box::new(Expr::Integer(5))
             }
         )
@@ -1130,13 +1173,13 @@ fn ok_evaluate_nested_binary_conditional_expression() {
         left: Box::new(Expr::Integer(10)),
         operator: ComparisonOp::IsGreaterThan,
         right: Box::new(
-            Expr::Binary {
+            Expr::Arithmetic {
                 left: Box::new(Expr::Integer(5)),
-                operator: BinaryOp::Add,
+                operator: ArithmeticOp::Add,
                 right: Box::new(
-                    Expr::Binary {
+                    Expr::Arithmetic {
                         left: Box::new(Expr::Float(15.0)),
-                        operator: BinaryOp::Subtract,
+                        operator: ArithmeticOp::Subtract,
                         right: Box::new(Expr::Float(5.0))
                     }
                 )
@@ -1154,13 +1197,13 @@ fn ok_evaluate_nested_binary_conditional_expression() {
         left: Box::new(Expr::Integer(10)),
         operator: ComparisonOp::IsNotEqualTo,
         right: Box::new(
-            Expr::Binary {
+            Expr::Arithmetic {
                 left: Box::new(Expr::Integer(5)),
-                operator: BinaryOp::Add,
+                operator: ArithmeticOp::Add,
                 right: Box::new(
-                    Expr::Binary {
+                    Expr::Arithmetic {
                         left: Box::new(Expr::Float(15.0)),
-                        operator: BinaryOp::Subtract,
+                        operator: ArithmeticOp::Subtract,
                         right: Box::new(Expr::Float(5.0))
                     }
                 )
@@ -1178,13 +1221,13 @@ fn ok_evaluate_nested_binary_conditional_expression() {
         left: Box::new(Expr::Float(10.0)),
         operator: ComparisonOp::IsGreaterOrEqualTo,
         right: Box::new(
-            Expr::Binary {
+            Expr::Arithmetic {
                 left: Box::new(Expr::Float(5.0)),
-                operator: BinaryOp::Add,
+                operator: ArithmeticOp::Add,
                 right: Box::new(
-                    Expr::Binary {
+                    Expr::Arithmetic {
                         left: Box::new(Expr::Integer(15)),
-                        operator: BinaryOp::Subtract,
+                        operator: ArithmeticOp::Subtract,
                         right: Box::new(Expr::Integer(5))
                     }
                 )
@@ -1202,13 +1245,13 @@ fn ok_evaluate_nested_binary_conditional_expression() {
         left: Box::new(Expr::Float(10.0)),
         operator: ComparisonOp::IsLessOrEqualTo,
         right: Box::new(
-            Expr::Binary {
+            Expr::Arithmetic {
                 left: Box::new(Expr::Float(5.0)),
-                operator: BinaryOp::Add,
+                operator: ArithmeticOp::Add,
                 right: Box::new(
-                    Expr::Binary {
+                    Expr::Arithmetic {
                         left: Box::new(Expr::Integer(15)),
-                        operator: BinaryOp::Subtract,
+                        operator: ArithmeticOp::Subtract,
                         right: Box::new(Expr::Integer(5))
                     }
                 )
@@ -1333,12 +1376,12 @@ fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and
     // let x = 10.0 + (10.0 + 10.0): x = 30
     let define_stmt = Stmt::Let {
         identifier: "x".to_string(),
-        expression: Expr::Binary {
+        expression: Expr::Arithmetic {
             left: Box::new(Expr::Integer(10)),
-            operator: BinaryOp::Add,
-            right: Box::new(Expr::Binary {
+            operator: ArithmeticOp::Add,
+            right: Box::new(Expr::Arithmetic {
                 left: Box::new(Expr::Float(10.0)),
-                operator: BinaryOp::Add,
+                operator: ArithmeticOp::Add,
                 right: Box::new(Expr::Float(10.0))
             })
         }
@@ -1352,12 +1395,12 @@ fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and
     // let y = 10.0 + (x + 10.0): y = 50
     let access_stmt = Stmt::Let {
         identifier: "y".to_string(),
-        expression: Expr::Binary {
+        expression: Expr::Arithmetic {
             left: Box::new(Expr::Integer(10)),
-            operator: BinaryOp::Add,
-            right: Box::new(Expr::Binary {
+            operator: ArithmeticOp::Add,
+            right: Box::new(Expr::Arithmetic {
                 left: Box::new(Expr::Identifier("x".to_string())),
-                operator: BinaryOp::Add,
+                operator: ArithmeticOp::Add,
                 right: Box::new(Expr::Float(10.0))
             })
         }
@@ -1369,9 +1412,9 @@ fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and
     );
 
     // x(30) + y(50): 80.0
-    let expression1 = Expr::Binary {
+    let expression1 = Expr::Arithmetic {
         left: Box::new(Expr::Identifier("x".to_string())),
-        operator: BinaryOp::Add,
+        operator: ArithmeticOp::Add,
         right: Box::new(Expr::Identifier("y".to_string()))
     };
 
