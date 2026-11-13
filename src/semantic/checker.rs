@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 
-use crate::{Expr, Program, Stmt, Type, BinaryOp, FunctionParameter};
+use crate::{BinaryOp, ComparisonOp, Expr, FunctionParameter, Program, Stmt, Type};
 
 use super::{Result, TypeError, TypeEnvironment, Binding};
 
@@ -248,6 +248,8 @@ impl TypeChecker {
             }
         }        
     }
+
+    
 }
 
 impl TypeChecker {

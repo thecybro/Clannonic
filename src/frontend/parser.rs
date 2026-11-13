@@ -2,7 +2,7 @@
 
 use crate::language::{
     BinaryOp,
-    ConditionalOp,
+    ComparisonOp,
     UnaryOp,
     UnaryFixity,
     AssignOp,
@@ -300,12 +300,12 @@ impl<'a> Parser<'a> {
         // self.parse_addition()?; 
         while let Ok(current) = self.current() {
             let operator = match current.kind {
-                TokenKind::EqualsEquals => ConditionalOp::IsEqualTo,
-                TokenKind::GreaterThan => ConditionalOp::IsGreaterThan,
-                TokenKind::LessThan => ConditionalOp::IsLessThan,
-                TokenKind::GreaterOrEquals => ConditionalOp::IsGreaterOrEqualTo,
-                TokenKind::LessOrEquals => ConditionalOp::IsLessOrEqualTo,
-                TokenKind::NotEquals => ConditionalOp::IsNotEqualTo,
+                TokenKind::EqualsEquals => ComparisonOp::IsEqualTo,
+                TokenKind::GreaterThan => ComparisonOp::IsGreaterThan,
+                TokenKind::LessThan => ComparisonOp::IsLessThan,
+                TokenKind::GreaterOrEquals => ComparisonOp::IsGreaterOrEqualTo,
+                TokenKind::LessOrEquals => ComparisonOp::IsLessOrEqualTo,
+                TokenKind::NotEquals => ComparisonOp::IsNotEqualTo,
                 _ => break
             };
 

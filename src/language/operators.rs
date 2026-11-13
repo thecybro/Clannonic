@@ -10,7 +10,7 @@ pub enum AssignOp {
 /// The operators you can use to compare stuff
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum ConditionalOp {
+pub enum ComparisonOp {
     IsEqualTo,
     IsNotEqualTo,
     IsGreaterThan,

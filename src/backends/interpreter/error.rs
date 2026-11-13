@@ -1,7 +1,7 @@
 
 use crate::language::{
     BinaryOp,
-    ConditionalOp,
+    ComparisonOp,
     UnaryOp,
     UnaryFixity,
     AssignOp,
@@ -31,9 +31,9 @@ pub enum EvalError {
         operator: BinaryOp,
         right: Value
     },
-    InvalidConditionalOperation {
+    InvalidComparisonOperation {
         left: Value,
-        operator: ConditionalOp,
+        operator: ComparisonOp,
         right: Value
     },
     InvalidUnaryOperation {

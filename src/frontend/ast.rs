@@ -1,7 +1,7 @@
 
 use crate::language::{
     BinaryOp,
-    ConditionalOp,
+    ComparisonOp,
     UnaryFixity,
     UnaryOp,
     AssignOp,
@@ -31,7 +31,7 @@ pub enum Expr {
         /// identifier or number but if we had made the left and right hand
         /// sides as not Expr, users wouldn't be able to write that
         left: Box<Expr>,
-        operator: ConditionalOp,
+        operator: ComparisonOp,
         right: Box<Expr>
     },
     Binary {

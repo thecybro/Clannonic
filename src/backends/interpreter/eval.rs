@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::language::{
     AssignOp, 
     BinaryOp, 
-    ConditionalOp, 
+    ComparisonOp, 
     UnaryFixity, 
     UnaryOp,
     Type, 
@@ -580,7 +580,7 @@ impl Interpreter {
     fn eval_conditional_expression(
         &mut self,
         left: &Expr,
-        operator: &ConditionalOp,
+        operator: &ComparisonOp,
         right: &Expr
     ) -> Result<Value> {
 
@@ -590,32 +590,32 @@ impl Interpreter {
         match (left, right) {
             (Value::Integer(left), Value::Integer(right)) => {
                 match operator {
-                    ConditionalOp::IsEqualTo => {
+                    ComparisonOp::IsEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left == right))
                         )
                     },
-                    ConditionalOp::IsNotEqualTo => {
+                    ComparisonOp::IsNotEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left != right))
                         )
                     },
-                    ConditionalOp::IsGreaterThan => {
+                    ComparisonOp::IsGreaterThan => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left > right))
                         )
                     },
-                    ConditionalOp::IsLessThan => {
+                    ComparisonOp::IsLessThan => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left < right))
                         )
                     },
-                    ConditionalOp::IsGreaterOrEqualTo => {
+                    ComparisonOp::IsGreaterOrEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left >= right))
                         )
                     },
-                    ConditionalOp::IsLessOrEqualTo => {
+                    ComparisonOp::IsLessOrEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left <= right))
                         )
@@ -624,32 +624,32 @@ impl Interpreter {
             },
             (Value::Integer(left), Value::Float(right)) => {
                 match operator {
-                    ConditionalOp::IsEqualTo => {
+                    ComparisonOp::IsEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left as f64 == right))
                         )
                     },
-                    ConditionalOp::IsNotEqualTo => {
+                    ComparisonOp::IsNotEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left as f64 != right))
                         )
                     },
-                    ConditionalOp::IsGreaterThan => {
+                    ComparisonOp::IsGreaterThan => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left as f64 > right))
                         )
                     },
-                    ConditionalOp::IsLessThan => {
+                    ComparisonOp::IsLessThan => {
                         Ok(Value::Boolean
                             (bool_raw_to_type((left as f64) < right))
                         )
                     },
-                    ConditionalOp::IsGreaterOrEqualTo => {
+                    ComparisonOp::IsGreaterOrEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left as f64 >= right))
                         )
                     },
-                    ConditionalOp::IsLessOrEqualTo => {
+                    ComparisonOp::IsLessOrEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left as f64 <= right))
                         )
@@ -658,32 +658,32 @@ impl Interpreter {
             },
             (Value::Float(left), Value::Integer(right)) => {
                 match operator {
-                    ConditionalOp::IsEqualTo => {
+                    ComparisonOp::IsEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left == right as f64))
                         )
                     },
-                    ConditionalOp::IsNotEqualTo => {
+                    ComparisonOp::IsNotEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left != right as f64))
                         )
                     },
-                    ConditionalOp::IsGreaterThan => {
+                    ComparisonOp::IsGreaterThan => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left > right as f64))
                         )
                     },
-                    ConditionalOp::IsLessThan => {
+                    ComparisonOp::IsLessThan => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left < right as f64))
                         )
                     },
-                    ConditionalOp::IsGreaterOrEqualTo => {
+                    ComparisonOp::IsGreaterOrEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left >= right as f64))
                         )
                     },
-                    ConditionalOp::IsLessOrEqualTo => {
+                    ComparisonOp::IsLessOrEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left <= right as f64))
                         )
@@ -692,32 +692,32 @@ impl Interpreter {
             },
             (Value::Float(left), Value::Float(right)) => {
                 match operator {
-                    ConditionalOp::IsEqualTo => {
+                    ComparisonOp::IsEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left == right))
                         )
                     },
-                    ConditionalOp::IsNotEqualTo => {
+                    ComparisonOp::IsNotEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left != right))
                         )
                     },
-                    ConditionalOp::IsGreaterThan => {
+                    ComparisonOp::IsGreaterThan => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left > right))
                         )
                     },
-                    ConditionalOp::IsLessThan => {
+                    ComparisonOp::IsLessThan => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left < right))
                         )
                     },
-                    ConditionalOp::IsGreaterOrEqualTo => {
+                    ComparisonOp::IsGreaterOrEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left >= right))
                         )
                     },
-                    ConditionalOp::IsLessOrEqualTo => {
+                    ComparisonOp::IsLessOrEqualTo => {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left <= right))
                         )
@@ -726,7 +726,7 @@ impl Interpreter {
             },
             (left, right) => {
                 return Err(
-                    EvalError::InvalidConditionalOperation {
+                    EvalError::InvalidComparisonOperation {
                         left,
                         operator: *operator,
                         right
@@ -1015,7 +1015,7 @@ fn ok_evaluate_conditional_expression() {
     // 10.0 == 10.0: true
     let expression1 = Expr::Conditional {
         left: Box::new(Expr::Float(10.0)),
-        operator: ConditionalOp::IsEqualTo,
+        operator: ComparisonOp::IsEqualTo,
         right: Box::new(Expr::Float(10.0))
     };
 
@@ -1027,7 +1027,7 @@ fn ok_evaluate_conditional_expression() {
     // 10.0 > 10.0: false
     let expression2 = Expr::Conditional {
         left: Box::new(Expr::Float(10.0)),
-        operator: ConditionalOp::IsGreaterThan,
+        operator: ComparisonOp::IsGreaterThan,
         right: Box::new(Expr::Float(10.0))
     };
 
@@ -1039,7 +1039,7 @@ fn ok_evaluate_conditional_expression() {
     // 10.0 < 10.0: false
     let expression3 = Expr::Conditional {
         left: Box::new(Expr::Float(10.0)),
-        operator: ConditionalOp::IsLessThan,
+        operator: ComparisonOp::IsLessThan,
         right: Box::new(Expr::Float(10.0))
     };
 
@@ -1051,7 +1051,7 @@ fn ok_evaluate_conditional_expression() {
     // 10.0 != 10.0: false
     let expression4 = Expr::Conditional {
         left: Box::new(Expr::Float(10.0)),
-        operator: ConditionalOp::IsNotEqualTo,
+        operator: ComparisonOp::IsNotEqualTo,
         right: Box::new(Expr::Float(10.0))
     };
 
@@ -1063,7 +1063,7 @@ fn ok_evaluate_conditional_expression() {
     // 10.0 >= 10.0: true
     let expression5 = Expr::Conditional {
         left: Box::new(Expr::Float(10.0)),
-        operator: ConditionalOp::IsGreaterOrEqualTo,
+        operator: ComparisonOp::IsGreaterOrEqualTo,
         right: Box::new(Expr::Float(10.0))
     };
 
@@ -1075,7 +1075,7 @@ fn ok_evaluate_conditional_expression() {
     // 10.0 <= 10.0: true
     let expression6 = Expr::Conditional {
         left: Box::new(Expr::Float(10.0)),
-        operator: ConditionalOp::IsLessOrEqualTo,
+        operator: ComparisonOp::IsLessOrEqualTo,
         right: Box::new(Expr::Float(10.0))
     };
 
@@ -1092,7 +1092,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     // 10.0 == (5.0 + 5.0): true
     let expression1 = Expr::Conditional {
         left: Box::new(Expr::Integer(10)),
-        operator: ConditionalOp::IsEqualTo,
+        operator: ComparisonOp::IsEqualTo,
         right: Box::new(
             Expr::Binary {
                 left: Box::new(Expr::Integer(5)),
@@ -1110,7 +1110,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     // 10.0 < (5.0 + 5.0): true
     let expression2 = Expr::Conditional {
         left: Box::new(Expr::Float(10.0)),
-        operator: ConditionalOp::IsLessThan,
+        operator: ComparisonOp::IsLessThan,
         right: Box::new(
             Expr::Binary {
                 left: Box::new(Expr::Float(5.0)),
@@ -1128,7 +1128,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     // 10.0 > (5.0 + (15.0 - 5.0)): false
     let expression3 = Expr::Conditional {
         left: Box::new(Expr::Integer(10)),
-        operator: ConditionalOp::IsGreaterThan,
+        operator: ComparisonOp::IsGreaterThan,
         right: Box::new(
             Expr::Binary {
                 left: Box::new(Expr::Integer(5)),
@@ -1152,7 +1152,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     // 10.0 != (5.0 + (15.0 - 5.0)): true
     let expression4 = Expr::Conditional {
         left: Box::new(Expr::Integer(10)),
-        operator: ConditionalOp::IsNotEqualTo,
+        operator: ComparisonOp::IsNotEqualTo,
         right: Box::new(
             Expr::Binary {
                 left: Box::new(Expr::Integer(5)),
@@ -1176,7 +1176,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     // 10.0 >= (5.0 + (15.0 - 5.0)): false
     let expression5 = Expr::Conditional {
         left: Box::new(Expr::Float(10.0)),
-        operator: ConditionalOp::IsGreaterOrEqualTo,
+        operator: ComparisonOp::IsGreaterOrEqualTo,
         right: Box::new(
             Expr::Binary {
                 left: Box::new(Expr::Float(5.0)),
@@ -1200,7 +1200,7 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     // 10.0 <= (5.0 + (15.0 - 5.0)): true
     let expression6 = Expr::Conditional {
         left: Box::new(Expr::Float(10.0)),
-        operator: ConditionalOp::IsLessOrEqualTo,
+        operator: ComparisonOp::IsLessOrEqualTo,
         right: Box::new(
             Expr::Binary {
                 left: Box::new(Expr::Float(5.0)),
@@ -1233,7 +1233,7 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
     // x(10.0) == y(5.0): false
     let expression1 = Expr::Conditional {
         left: Box::new(Expr::Identifier("x".to_string())),
-        operator: ConditionalOp::IsEqualTo,
+        operator: ComparisonOp::IsEqualTo,
         right: Box::new(Expr::Identifier("y".to_string()))
     };
 
@@ -1245,7 +1245,7 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
     // x(10.0) > y(5.0): true
     let expression2 = Expr::Conditional {
         left: Box::new(Expr::Identifier("x".to_string())),
-        operator: ConditionalOp::IsGreaterThan,
+        operator: ComparisonOp::IsGreaterThan,
         right: Box::new(Expr::Identifier("y".to_string()))
     };
 
@@ -1257,7 +1257,7 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
     // x(10.0) < y(5.0): false
     let expression3 = Expr::Conditional {
         left: Box::new(Expr::Identifier("x".to_string())),
-        operator: ConditionalOp::IsLessThan,
+        operator: ComparisonOp::IsLessThan,
         right: Box::new(Expr::Identifier("y".to_string()))
     };
 
@@ -1274,16 +1274,16 @@ fn err_evaluate_conditional_expression() {
     // "x" == 10.0: Err()
     let expression1 = Expr::Conditional {
         left: Box::new(Expr::String("x".to_string())),
-        operator: ConditionalOp::IsEqualTo,
+        operator: ComparisonOp::IsEqualTo,
         right: Box::new(Expr::Float(10.0))
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression1),
         Err(
-            EvalError::InvalidConditionalOperation {
+            EvalError::InvalidComparisonOperation {
                 left: Value::String("x".to_string()),
-                operator: ConditionalOp::IsEqualTo,
+                operator: ComparisonOp::IsEqualTo,
                 right: Value::Float(10.0)
             }
         )
@@ -1292,16 +1292,16 @@ fn err_evaluate_conditional_expression() {
     // 10.0 == "x": Err()
     let expression1 = Expr::Conditional {
         left: Box::new(Expr::Float(10.0)),
-        operator: ConditionalOp::IsEqualTo,
+        operator: ComparisonOp::IsEqualTo,
         right: Box::new(Expr::String("x".to_string())),
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression1),
         Err(
-            EvalError::InvalidConditionalOperation {
+            EvalError::InvalidComparisonOperation {
                 left: Value::Float(10.0),
-                operator: ConditionalOp::IsEqualTo,
+                operator: ComparisonOp::IsEqualTo,
                 right: Value::String("x".to_string()),
             }
         )
@@ -1310,16 +1310,16 @@ fn err_evaluate_conditional_expression() {
     // "x" == "x": Err()
     let expression1 = Expr::Conditional {
         left: Box::new(Expr::String("x".to_string())),
-        operator: ConditionalOp::IsEqualTo,
+        operator: ComparisonOp::IsEqualTo,
         right: Box::new(Expr::String("x".to_string())),
     };
 
     assert_eq!(
         interpreter.eval_expression(&expression1),
         Err(
-            EvalError::InvalidConditionalOperation {
+            EvalError::InvalidComparisonOperation {
                 left: Value::String("x".to_string()),
-                operator: ConditionalOp::IsEqualTo,
+                operator: ComparisonOp::IsEqualTo,
                 right: Value::String("x".to_string())
             }
         )
@@ -1383,7 +1383,7 @@ fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and
     // x(30) < y(50): true
     let expression2 = Expr::Conditional {
         left: Box::new(Expr::Identifier("x".to_string())),
-        operator: ConditionalOp::IsLessThan,
+        operator: ComparisonOp::IsLessThan,
         right: Box::new(Expr::Identifier("y".to_string()))
     };
 
