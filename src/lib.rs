@@ -66,9 +66,9 @@ pub fn run(source: &str) -> Result<()> {
 
     let checked = TypeChecker::new().check_program(&parsed)?;
     
-    // let result = Interpreter::new().evaluate(&parsed);
+    let result = Interpreter::new().evaluate(&parsed);
 
-    // println!("{result:#?}");
+    println!("{result:#?}");
 
     Ok(())
 }

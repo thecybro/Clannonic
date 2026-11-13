@@ -1,5 +1,5 @@
 
-use crate::{BinaryOp, Type, language::UnaryOp};
+use crate::{ArithmeticOp, Type, language::{ComparisonOp, UnaryOp}};
 
 pub(super) type Result<T> = std::result::Result<T, TypeError>;
 
@@ -20,12 +20,18 @@ pub enum TypeError {
         found: Type
     },
 
-    InvalidBinaryOperation {
+    InvalidArithmeticOperation {
         left: Type,
-        operator: BinaryOp,
+        operator: ArithmeticOp,
         right: Type,
     },
 
+    InvalidComparisonOperation {
+        left: Type,
+        operator: ComparisonOp,
+        right: Type,
+    },
+    
     InvalidUnaryOperation {
         operator: UnaryOp,
         found: Type

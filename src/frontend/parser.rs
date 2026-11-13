@@ -1,7 +1,7 @@
 
 
 use crate::language::{
-    BinaryOp,
+    ArithmeticOp,
     ComparisonOp,
     UnaryOp,
     UnaryFixity,
@@ -280,7 +280,7 @@ impl<'a> Parser<'a> {
     /// here, we called conditional cuz binary operations need to be done before
     /// conditional operations
     fn parse_expression(&mut self) -> Result<Expr> {
-        self.parse_conditional()
+        self.parse_comparison()
     }
 
     /// Since we need to make sure to parse the binary operations if there are any,
@@ -289,7 +289,7 @@ impl<'a> Parser<'a> {
     /// If there are any binary operators, we would get binary tree,
     /// and if there are no binary operators, we would just get the identifiers or 
     /// numbers
-    fn parse_conditional(&mut self) -> Result<Expr> {
+    fn parse_comparison(&mut self) -> Result<Expr> {
         // get the expression to put at the left of the conditional operator 
         let mut left = self.parse_addition()?; 
 
@@ -309,7 +309,7 @@ impl<'a> Parser<'a> {
                 _ => break
             };
 
-            // We reaching this line means we have gotten a conditional operator,
+            // We reaching this line means we have gotten a comparison operator,
             // so consume it
             self.advance()?;
 
@@ -317,7 +317,7 @@ impl<'a> Parser<'a> {
             // number or identifier or a binary)
             let right = self.parse_addition()?;
 
-            left = Expr::Conditional {
+            left = Expr::Comparison {
                 left: Box::new(left),
                 operator,
                 right: Box::new(right)
@@ -345,15 +345,15 @@ impl<'a> Parser<'a> {
         
         while let Ok(token) = self.current() {
             let operator = match token.kind {
-                TokenKind::Plus => BinaryOp::Add,
-                TokenKind::Minus => BinaryOp::Subtract,
+                TokenKind::Plus => ArithmeticOp::Add,
+                TokenKind::Minus => ArithmeticOp::Subtract,
                 _ => break
             };
 
             self.advance()?;
             let right = self.parse_multiplication()?;
 
-            left = Expr::Binary {
+            left = Expr::Arithmetic {
                 left: Box::new(left),
                 operator,
                 right: Box::new(right)
@@ -372,8 +372,8 @@ impl<'a> Parser<'a> {
 
         while let Ok(token) = self.current() {
             let operator = match token.kind {
-                TokenKind::Slash => BinaryOp::Divide,
-                TokenKind::Star => BinaryOp::Multiply,
+                TokenKind::Slash => ArithmeticOp::Divide,
+                TokenKind::Star => ArithmeticOp::Multiply,
                 _ => break,
             };
 
@@ -384,7 +384,7 @@ impl<'a> Parser<'a> {
             self.advance()?;
             let right = self.parse_primary()?;
 
-            left = Expr::Binary{
+            left = Expr::Arithmetic{
                 left: Box::new(left),
                 operator,
                 right: Box::new(right)

@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 
-use crate::{BinaryOp, ComparisonOp, Expr, FunctionParameter, Program, Stmt, Type};
+use crate::{ArithmeticOp, ComparisonOp, Expr, FunctionParameter, Program, Stmt, Type};
 
 use super::{Result, TypeError, TypeEnvironment, Binding};
 
@@ -33,12 +33,12 @@ impl TypeChecker {
         program: &Program,
     ) -> Result<()> {            
         for stmt in program.ast.iter() {
-            println!("Collecting function signatures");
+            // println!("Collecting function signatures");
             self.collect_function_signature(stmt)?;
         }
             
         for stmt in program.ast.iter() {
-            println!("Checking statements");
+            // println!("Checking statements");
             self.check_statement(stmt)?;
         }
 
@@ -57,6 +57,8 @@ impl TypeChecker {
                 expression 
             } => self.check_let_stmt(identifier, *mutable, *annotation, expression),
 
+            Stmt::If { condition, body } => self.check_if_stmt(condition, body),
+            
             Stmt::Function {
                 name,
                 parameters,
@@ -88,11 +90,17 @@ impl TypeChecker {
 
             Expr::FunctionCall { name, arguments } => self.check_function_call_expression(name, arguments),
             
-            Expr::Binary { 
+            Expr::Arithmetic { 
                 left, 
                 operator, 
                 right 
-            } => self.check_binary_expression(left, *operator, right),
+            } => self.check_arithmetic_expression(left, *operator, right),
+
+            Expr::Comparison { 
+                left, 
+                operator, 
+                right 
+            } => self.check_conditional_expression(left, *operator, right),
 
             _ => todo!()
         }
@@ -108,8 +116,8 @@ impl TypeChecker {
         expression: &Expr
     ) -> Result<()> {
 
-        println!("Got following details: ");
-        println!("Ident: {identifier}\nMutable: {mutable}\nAnnotation: {annotation:#?}\nExpression: {expression:#?}");
+        // println!("Got following details: ");
+        // println!("Ident: {identifier}\nMutable: {mutable}\nAnnotation: {annotation:#?}\nExpression: {expression:#?}");
         
         let inferred_type = self.check_expression(expression)?;
         
@@ -125,8 +133,8 @@ impl TypeChecker {
           inferred_type  
         };
 
-        println!("\nInferred following:\n");
-        println!("Type: {inferred_type:#?}\n");
+        // println!("\nInferred following:\n");
+        // println!("Type: {inferred_type:#?}\n");
         
         self.environment.define(
             identifier.to_string(),
@@ -139,6 +147,24 @@ impl TypeChecker {
         Ok(())
     }
 
+    fn check_if_stmt(
+        &mut self,
+        expression: &Expr,
+        body: &Box<[Stmt]>
+    ) -> Result<()> {
+
+        let inferred_type = self.check_expression(expression)?;
+
+        if inferred_type != Type::Bool {
+            return Err(TypeError::TypeMismatch {
+                expected: Type::Bool,
+                found: inferred_type
+            })
+        }
+        
+        Ok(())
+    }
+    
     fn check_function_body(
         &mut self,
         name: &str,
@@ -146,16 +172,16 @@ impl TypeChecker {
         return_type: Type,
         body: &[Stmt]
     ) -> Result<()> {
-        println!("Checking function body now");
+        // println!("Checking function body now");
         self.environment.enter_scope();
 
         for param in parameters {
-            let bin = Binding {
-                ty: param.data_type,
-                mutable: false,
-            };
-            let par_name = param.name.clone();
-            println!("Binded param '{par_name}' with binding: {bin:#?}");
+            // let bin = Binding {
+            //     ty: param.data_type,
+            //     mutable: false,
+            // };
+            // let par_name = param.name.clone();
+            // println!("Binded param '{par_name}' with binding: {bin:#?}");
             self.environment.define(
                 param.name.clone(),
                 Binding {
@@ -168,7 +194,7 @@ impl TypeChecker {
         let prev_ret_type = self.curr_ret_type.replace(return_type);
 
         for stmt in body {
-            println!("Checking following statement present inside function body: \n{stmt:#?}");
+            // println!("Checking following statement present inside function body: \n{stmt:#?}");
             self.check_statement(stmt)?;
         }
 
@@ -188,7 +214,7 @@ impl TypeChecker {
 
         let found = match expression {
             Some(expr) => {
-                println!("Trying to check the expression we got in return statement");
+                // println!("Trying to check the expression we got in return statement");
                 self.check_expression(expr)?
             },
             None => Type::Unit,
@@ -218,10 +244,10 @@ impl TypeChecker {
         Ok(function.return_type)
     }
 
-    fn check_binary_expression(
+    fn check_arithmetic_expression(
         &mut self,
         left: &Expr,
-        operator: BinaryOp,
+        operator: ArithmeticOp,
         right: &Expr
     ) -> Result<Type> {
 
@@ -231,16 +257,16 @@ impl TypeChecker {
         // It is a valid binary operation only if we are apply the binary operators
         // where the lhs and rhs are same (yet to write the checks for other operators)
         match (left_type, operator, right_type) {
-            (Type::Int, BinaryOp::Add, Type::Int)
-            | (Type::Int, BinaryOp::Subtract, Type::Int)
-            | (Type::Int, BinaryOp::Multiply, Type::Int)
-            | (Type::Int, BinaryOp::Divide, Type::Int)
+            (Type::Int, ArithmeticOp::Add, Type::Int)
+            | (Type::Int, ArithmeticOp::Subtract, Type::Int)
+            | (Type::Int, ArithmeticOp::Multiply, Type::Int)
+            | (Type::Int, ArithmeticOp::Divide, Type::Int)
             => {
-                println!("The return statement is a valid binary operation");
+                // println!("The return statement is a valid binary operation");
                 Ok(Type::Int)
             },
             (left, operator, right) => {
-                return Err(TypeError::InvalidBinaryOperation {
+                return Err(TypeError::InvalidArithmeticOperation {
                     left,
                     operator: operator,
                     right,
@@ -249,7 +275,35 @@ impl TypeChecker {
         }        
     }
 
-    
+    fn check_conditional_expression(
+        &mut self,
+        left: &Expr,
+        operator: ComparisonOp,
+        right: &Expr
+    ) -> Result<Type> {
+
+        let left_type = self.check_expression(left)?;
+        let right_type = self.check_expression(right)?;
+
+        match (left_type, operator, right_type) {
+            (Type::Int, ComparisonOp::IsEqualTo, Type::Int) 
+            | (Type::Int, ComparisonOp::IsNotEqualTo, Type::Int) 
+            | (Type::Int, ComparisonOp::IsGreaterThan, Type::Int) 
+            | (Type::Int, ComparisonOp::IsLessThan, Type::Int) 
+            | (Type::Int, ComparisonOp::IsGreaterOrEqualTo, Type::Int) 
+            | (Type::Int, ComparisonOp::IsLessOrEqualTo, Type::Int) 
+            => {
+                Ok(Type::Bool)
+            },
+            (left, operator, right) => {
+                return Err(TypeError::InvalidComparisonOperation {
+                    left,
+                    operator: operator,
+                    right,
+                })
+            }
+        }
+    }
 }
 
 impl TypeChecker {
@@ -276,7 +330,7 @@ impl TypeChecker {
             }  
         );
 
-        println!("Just defined the function signature: Name: {name}\n{sig:#?}");
+        // println!("Just defined the function signature: Name: {name}\n{sig:#?}");
 
         Ok(())
     }

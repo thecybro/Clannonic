@@ -23,7 +23,7 @@ pub enum ComparisonOp {
 /// The binary operators for arithmetic operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum BinaryOp {
+pub enum ArithmeticOp {
     Add,
     Subtract,
     Multiply,

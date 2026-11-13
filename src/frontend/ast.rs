@@ -1,6 +1,6 @@
 
 use crate::language::{
-    BinaryOp,
+    ArithmeticOp,
     ComparisonOp,
     UnaryFixity,
     UnaryOp,
@@ -18,7 +18,7 @@ pub enum Expr {
     Identifier(String),
     String(String),
     Boolean(BooleanVal), 
-    Conditional {
+    Comparison {
         /// The reason we use Expr instead of Identifier
         /// because we might have to compare between
         /// any 2 expressions as well, like 
@@ -34,7 +34,7 @@ pub enum Expr {
         operator: ComparisonOp,
         right: Box<Expr>
     },
-    Binary {
+    Arithmetic {
         /// Obviously the reason we used Expr is because
         /// we need to have an AST which has the operations/
         /// expressions in their own respective nodes,
@@ -64,7 +64,7 @@ pub enum Expr {
         /// let x = a+b-c*d/e // perfectly valid
         /// ```
         left: Box<Expr>,
-        operator: BinaryOp,
+        operator: ArithmeticOp,
         right: Box<Expr>,
     },
     Unary {
