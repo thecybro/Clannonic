@@ -7,8 +7,12 @@ pub(super) type Result<T> = std::result::Result<T, TypeError>;
 pub enum TypeError {
     UndefinedVariable(String),
 
+    UndefinedFunction(String),
+    
     DuplicateVariable(String),
 
+    DuplicateFunctionDeclaration(String),
+    
     ImmutableAssignment(String),
 
     TypeMismatch {

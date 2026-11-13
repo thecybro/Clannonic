@@ -28,6 +28,10 @@ impl TypeEnvironment {
     }
 
     pub fn exit_scope(&mut self) {
+        // We need to make sure the length is more than 1
+        // because if we popped the element when the element is
+        // 0 for example, it would lead to a crash while trying to 
+        // get the last(current) scope (see the define() method)
         assert!(self.scopes.len() > 1);
         self.scopes.pop();
     }
@@ -37,6 +41,10 @@ impl TypeEnvironment {
         name: String,
         binding: Binding,
     ) -> Result<()> {
+        // We use .unwrap() here despite it being able to crash our program because
+        // if we already have the TypeChecker instance initialized, we sure have
+        // atleast the scope vector with an empty HashMap, meaning vector having
+        // one element at index 0, which is our current scope, which we are gonna modify
         let current = self.scopes.last_mut().unwrap();
 
         if current.contains_key(&name) {
