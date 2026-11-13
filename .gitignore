@@ -1,5 +1,10 @@
 /target
 # examples/
 main.cln
+*.cln
 # tests/
 exp/
+
+# These are in the experimental phase for now, will push later
+src/stdlib/
+src/core/
