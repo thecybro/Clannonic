@@ -174,8 +174,8 @@ impl TypeChecker {
         let variable_type = if let Some(annotation) = annotation {
             if annotation != inferred_type {
                 return Err(TypeError::TypeMismatch {
-                    expected: inferred_type,
-                    found: annotation
+                    expected: annotation,
+                    found: inferred_type
                 });
             }
             annotation
@@ -256,13 +256,14 @@ impl TypeChecker {
 
         // The operator owns the rule, so we just ask it for return type
         // if the types are valid for assignment operation
-        operator
-            .return_type(ident_type, right_type)
-            .ok_or(TypeError::TypeMismatch {
+        if operator.validates(ident_type, right_type) {
+            Ok(())
+        } else {
+            Err(TypeError::TypeMismatch {
                 expected: ident_type,
                 found: right_type
             })
-            .map(|_| ())        
+        }
     }
     
     fn check_function_body(
@@ -276,12 +277,6 @@ impl TypeChecker {
         self.environment.enter_scope();
 
         for param in parameters {
-            // let bin = Binding {
-            //     ty: param.data_type,
-            //     mutable: false,
-            // };
-            // let par_name = param.name.clone();
-            // println!("Binded param '{par_name}' with binding: {bin:#?}");
             self.environment.define(
                 param.name.clone(),
                 Binding {
@@ -333,13 +328,35 @@ impl TypeChecker {
     fn check_function_call_expression(
         &mut self,
         name: &str,
-        arguments: &Box<[Expr]>,
+        arguments: &[Expr],
     ) -> Result<Type> {
 
-        let function = match self.lookup_function(name) {
-            Some(func) => func,
-            None => return Err(TypeError::UndefinedFunction(name.to_string()))
-        };
+        let function = self
+            .lookup_function(name)
+            .ok_or_else(|| TypeError::UndefinedFunction(name.to_string()))?
+            .clone();
+
+        if arguments.len() != function.parameters.len() {
+            return Err(TypeError::WrongArgumentCount {
+                expected: function.parameters.len(),
+                found: arguments.len()
+            })
+        }
+
+        for (index, (argument, expected_type)) in arguments.iter()
+            .zip(function.parameters.iter())
+            .enumerate()
+        {
+            let found_type = self.check_expression(argument)?;
+
+            if found_type != *expected_type {
+                return Err(TypeError::InvalidArgumentType {
+                    parameter: index,
+                    expected: *expected_type,
+                    found: found_type
+                })
+            }
+        }
         
         Ok(function.return_type)
     }
