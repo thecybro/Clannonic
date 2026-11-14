@@ -1,5 +1,8 @@
 
-use std::collections::HashMap;
+use std::collections::{
+    HashMap,
+    hash_map::Entry,
+};
 use std::rc::Rc;
 
 use crate::language::{
@@ -68,11 +71,11 @@ impl Interpreter {
         }
         
         for stmt in program.ast.iter() {
-            match stmt {
-                Stmt::Function{ .. } => {},
-                _ => {let _ = self.eval_stmt(&stmt)?;}
+            // Evaluate the statement only if it is not a function
+            // because we have already registered all functions
+            if !matches!(stmt, Stmt::Function{ .. }) {
+                let _ = self.eval_stmt(&stmt)?;
             }
-            // let _ = self.eval_stmt(&stmt)?;
         }
 
         Ok(())
@@ -81,14 +84,35 @@ impl Interpreter {
 
 #[allow(unused)]
 impl Interpreter {
+    /// Take any environment as the parent and create a new environment where
+    /// the parent is the env you passed and the values field is where you
+    /// push your bindings/identifiers or any value
+    /// 
+    /// The id it gives is simply the number of environments you had before creating
+    /// the new one
+    /// 
+    /// How it manages to create unique ids despite not using any fancy hashing techniques
+    /// is;
+    /// We execute only one statement & expression at a time and when we create a new env
+    /// inside those methods; no other method is creating the env id and we simply get the
+    /// number of environments we had till that time and make that the id of the current env
+    /// 
+    /// This way, we can even get the index of the environment created, cuz index of the newly
+    /// created element is always equal to the length of the Vec we had before creating it
+    /// `new_index = old_len`
     fn create_env(&mut self, parent: Option<EnvId>) -> EnvId {
+        // Get the total number of environments we have till now
         let id = EnvId(self.environments.len());
 
+        // Make that envid the parent and create a new HashMap as the values
+        // of the environment whose parent is the id that was supplied to us
         self.environments.push(Environment {
             parent,
             values: HashMap::new()
         });
 
+        // The number of enviroments we had when we created a new environment
+        // which is the id of the current environment
         id
     }
 
@@ -104,29 +128,32 @@ impl Interpreter {
         // Goes into globals field
     }
 
+    /// Use this method when we just want to initialize an entry in the given environment
+    /// and dont want to overwrite if the key already exists
+    /// 
     /// This throws error if the variable already exists on the current environment
     fn define(&mut self, env: EnvId, name: String, value: Value) -> Result<Value> {
-        // .get() will give us a value if the value under than identifier already
-        // exists, which we dont want to let happen in this define() method
-        if self.get(env, &name).is_ok() {
-            return Err(
-                EvalError::DuplicateVariable(
-                    format!("The variable '{name}' already exists")
-                )
-            )
-        }
-
-        // We dont travel to the parent nodes because we want to declare the identifier
-        // locally inside the current environment only
-        self.environments[env.0]
+        // env.0 just extracts the actual usize inside EnvId which has just one tuple field
+        match self.environments[env.0]
             .values
-            .insert(name.clone(), value.clone());
-
-        println!("Following value has been stored in '{name}'");
-        println!("'{value}'\n");
-        
-        Ok(value)
-        
+            .entry(name.clone()) {
+                // There is no entry with the key/name we got; so we can safely create
+                // an entry with the name and value as key/value
+                Entry::Vacant(entry) => {
+                    entry.insert(value.clone());
+                    println!("Initialized '{name}' with '{value}'");
+                    Ok(value)
+                },
+                // The entry already exists; which is an error when trying to initialize
+                // an entry, so we throw the error
+                Entry::Occupied(_) => {
+                    return Err(
+                        EvalError::DuplicateVariable(
+                            format!("The variable '{name}' already exists")
+                        )
+                    )
+                }
+            }
     }
 
     /// Search the current environment until we keep getting ids
@@ -136,14 +163,14 @@ impl Interpreter {
     /// 
     /// If we didn't get the required value but the ids are finished,
     /// return None indicating we didn't find any value
-    fn get(&self, env: EnvId, name: &str) -> Result<Value> {
+    fn get(&self, env: EnvId, name: &str) -> Result<&Value> {
         let mut current = Some(env);
 
         while let Some(id) = current {
             let environment = &self.environments[id.0];
 
             if let Some(value) = environment.values.get(name) {
-                return Ok(value.clone());
+                return Ok(value);
             }
 
             // Since we didn't get value in current scope, we change the
@@ -152,9 +179,6 @@ impl Interpreter {
             // we get the matching identifier or reach global scope
             current = environment.parent;
         }
-
-        // println!("Threw error from interpreter/impl.rs line 135\n");
-        // println!("Self is: {self:#?}");
         
         Err(
             EvalError::UndefinedVariable(
@@ -169,24 +193,42 @@ impl Interpreter {
     /// But if we didn't get that identifier in the current scope, we walk up to its
     /// parents and will keep doing the same until we either get the identifier or
     /// reach global scope
-    fn assign(&mut self, env: EnvId, name: &str, value: &Value) -> Result<Value> {
+    fn assign(&mut self, env: EnvId, name: &str, value: Value) -> Result<Value> {
         let mut current = Some(env);
 
+        // Start from the current environment, if we still have it,
+        // which we will have at the first loop.
+        // 
+        // But when we mutate the value of current inside the loop,
+        // to move upwards towards the parents in our case, we might
+        // eventually reach the point (global scope) where there is no
+        // parent; meaning we will get None if we tried to go even upwards
+        // 
+        // So we can say that the identifier we were looking for doesn't exist
         while let Some(id) = current {
-            let environment = &self.environments[id.0];
+            // The current environment is the id we currently have
+            let environment = &mut self.environments[id.0];
 
-            if environment.values.contains_key(name) {
-                return self.environments[id.0].values.insert(name.to_string(), value.clone())
-                    .ok_or_else(
-                        || EvalError::FailedToStoreValue(
-                            format!("Failed to store '{value}' in '{name}'")
-                        )
-                    )
+            // Try getting a mutable reference to the key if it exists;
+            // 
+            // If it exists, we will get Some(val) and we can mutate val
+            // with the new value.
+            // 
+            // If it doesn't exist however, we simply ignore it for now
+            if let Some(val) = environment.values.get_mut(name) {
+                *val = value.clone();
+                println!("Assigned '{val}' to '{name}'");
+                return Ok(value)
             }
 
+            // If we reached here; it means we didn't get the identifier
+            // in the current environment, so move towards the parent of
+            // the current environment
             current = environment.parent;
         }
 
+        // If we reached here, it means we didn't find the identifier we were
+        // looking for; which is an error when trying to assign value to one
         Err(
             EvalError::UndefinedVariable(
                 format!("The identifier '{name}' is undefined!")
@@ -204,19 +246,19 @@ impl Interpreter {
         self.define(self.globals, name, value)
     }
 
-    fn get_current(&self, name: &str) -> Result<Value> {
+    fn get_current(&self, name: &str) -> Result<&Value> {
         self.get(self.current, name)
     }
 
-    fn get_global(&self, name: &str) -> Result<Value> {
+    fn get_global(&self, name: &str) -> Result<&Value> {
         self.get(self.globals, name)
     }
 
-    fn assign_current(&mut self, name: &str, value: &Value) -> Result<Value> {
+    fn assign_current(&mut self, name: &str, value: Value) -> Result<Value> {
         self.assign(self.current, name, value)
     }
 
-    fn assign_globals(&mut self, name: &str, value: &Value) -> Result<Value> {
+    fn assign_globals(&mut self, name: &str, value: Value) -> Result<Value> {
         self.assign(self.globals, name, value)
     }
 
@@ -250,6 +292,7 @@ impl Interpreter {
             // Assign statement replaces the identifier's value stored on the available
             // environment, but throws an error if it doesn't exist
             Stmt::Assign { identifier, operator, expression } => {
+                // println!("Detected assignment statement: \n{identifier} {operator:#?} {expression:#?}");
                 self.eval_assign_stmt(identifier, *operator, expression)?;
                 Ok(Flow::Continue)
             }
@@ -354,6 +397,7 @@ impl Interpreter {
                     AssignOp::Assign => unreachable!(),
                 };
 
+                // println!("Just sent {left:#?} {arithmetic_operator:#?} {expression:#?} for arithmetic evaluation");
                 self.eval_arithmetic_expression(
                     &left,
                     &arithmetic_operator,
@@ -361,7 +405,8 @@ impl Interpreter {
                 )?
             }
         };
-        self.assign_current(identifier, &value)
+        // println!("Just got value {value:#?} into assign stmt");
+        self.assign_current(identifier, value)
     }
 
     fn eval_if_stmt(
@@ -448,7 +493,7 @@ impl Interpreter {
             Expr::String(value) => Ok(Value::String(value.clone())),
             Expr::Identifier(name) => {
                 // println!("From interpreter/impl.rs line 325\n");
-                self.get_current(name)
+                Ok(self.get_current(name)?.clone())
             },
             Expr::Boolean(boolean_type) => {
                 self.eval_boolean_expression(boolean_type)
@@ -474,7 +519,7 @@ impl Interpreter {
     fn eval_function_call_expression(&mut self, name: &str, arguments: &Box<[Expr]>) -> Result<Value> {
         // We would have the entire function body stored in value
         // println!("From interpreter/impl.rs: line 457\n");
-        let value = self.get_current(name)?;
+        let value = self.get_current(name)?.clone();
 
         // println!("From interpreter/impl.rs: line 459\nGot {value}");
         
@@ -523,7 +568,7 @@ impl Interpreter {
                 return Err(
                     EvalError::ExpressionNotCallable{
                         error: format!("Given expression '{name}' is not callable"),
-                        value,
+                        value: value.clone(),
                     }
                 )
             }
@@ -551,8 +596,10 @@ impl Interpreter {
         let left = self.eval_expression(left)?;
         let right = self.eval_expression(right)?;
 
+        // println!("Just got {left:#?} {operator:#?} {right:#?} for arithmetic evaluation");
         match (left, operator, right) {
             (Value::Integer(left), ArithmeticOp::Add, Value::Integer(right)) => {
+                // println!("Added {left:#?} and {right:#?}");
                 Ok(Value::Integer(left + right))
             },
             (Value::Integer(left), ArithmeticOp::Subtract, Value::Integer(right)) => {
@@ -595,7 +642,7 @@ impl Interpreter {
         
         let operand_val = self.eval_expression(operand)?;
 
-        println!("Got operator '{operator:#?}' Operand_val '{operand_val}' and fixity '{fixity:#?}'");
+        // println!("Got operator '{operator:#?}' Operand_val '{operand_val}' and fixity '{fixity:#?}'");
         
         match (operator, operand_val, fixity) {
             (UnaryOp::Plus, Value::Integer(num), UnaryFixity::Prefix) => Ok(Value::Integer(num.abs())),
