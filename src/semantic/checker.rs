@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 
-use crate::{ArithmeticOp, ComparisonOp, Expr, FunctionParameter, Program, Stmt, Type};
+use crate::{ArithmeticOp, ComparisonOp, Expr, FunctionParameter, Program, Stmt, Type, language::AssignOp};
 
 use super::{Result, TypeError, TypeEnvironment, Binding};
 
@@ -65,6 +65,12 @@ impl TypeChecker {
                 return_type,
                 body,
             } => self.check_function_body(name, parameters, *return_type, body),
+
+            Stmt::Assign {
+                identifier,
+                operator,
+                expression
+            } => self.check_assign_stmt(identifier, *operator, expression),
             
             Stmt::Return(expression) => self.check_return_stmt(expression),
             
@@ -158,6 +164,51 @@ impl TypeChecker {
         if inferred_type != Type::Bool {
             return Err(TypeError::TypeMismatch {
                 expected: Type::Bool,
+                found: inferred_type
+            })
+        }
+        
+        Ok(())
+    }
+
+    fn check_assign_stmt(
+        &mut self,
+        identifier: &str,
+        operator: AssignOp,
+        expression: &Expr,
+    ) -> Result<()> {
+
+        let stored_ident = match self.environment.lookup_mut(identifier) {
+            Some(name) => name,
+            None => {
+                return Err(TypeError::UndefinedVariable(identifier.to_string()))
+            }
+        };
+
+        if !stored_ident.mutable {
+            return Err(TypeError::ImmutableAssignment(identifier.to_string()))
+        }
+
+        let inferred_type = match operator {
+            AssignOp::AddAssign | AssignOp::SubtractAssign => {
+                let arithmetic_operator = if operator == AssignOp::AddAssign {
+                    ArithmeticOp::Add
+                } else {
+                    ArithmeticOp::Subtract
+                };
+
+                let left = Expr::Identifier(identifier.to_string());
+
+                self.check_arithmetic_expression(&left, arithmetic_operator, expression)?
+            },
+            AssignOp::Assign => {self.check_expression(expression)?}
+        };
+
+        let ident_type = stored_ident.ty;
+    
+        if inferred_type != ident_type {
+            return Err(TypeError::TypeMismatch {
+                expected: ident_type,
                 found: inferred_type
             })
         }
@@ -318,19 +369,13 @@ impl TypeChecker {
             return Err(TypeError::DuplicateFunctionDeclaration(name))
         }
 
-        let sig = FunctionSignature {
-            parameters: parameters.clone(),
-            return_type
-        } ;
-        let def = self.functions.insert(
+        self.functions.insert(
             name.clone(),
             FunctionSignature {
                 parameters: parameters.clone(),
                 return_type
             }  
         );
-
-        // println!("Just defined the function signature: Name: {name}\n{sig:#?}");
 
         Ok(())
     }
