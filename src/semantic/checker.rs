@@ -72,6 +72,8 @@ impl TypeChecker {
             } => self.check_let_stmt(identifier, *mutable, *annotation, expression),
 
             Stmt::If { condition, body } => self.check_if_stmt(condition, body),
+
+            Stmt::While { condition, body } => self.check_while_stmt(condition, body),
             
             Stmt::Function {
                 name,
@@ -87,6 +89,11 @@ impl TypeChecker {
             } => self.check_assign_stmt(identifier, *operator, expression),
             
             Stmt::Return(expression) => self.check_return_stmt(expression),
+
+            Stmt::Expression(expression) => {
+                self.check_expression(expression)?;
+                Ok(())
+            },
             
             _ => todo!()
         }
@@ -137,6 +144,20 @@ impl TypeChecker {
 }
 
 impl TypeChecker {
+    fn check_block(
+        &mut self,
+        body: &[Stmt]
+    ) -> Result<()> {
+
+        let result = body
+            .iter()
+            .try_for_each(|statement| self.check_statement(statement));
+
+        self.environment.enter_scope();
+
+        result
+    }
+    
     fn check_let_stmt(
         &mut self,
         identifier: &str,
@@ -190,10 +211,28 @@ impl TypeChecker {
                 found: inferred_type
             })
         }
-        
-        Ok(())
+
+        self.check_block(body)
     }
 
+    fn check_while_stmt(
+        &mut self,
+        condition: &Expr,
+        body: &[Stmt],
+    ) -> Result<()> {
+
+        let inferred_type = self.check_expression(condition)?;
+
+        if inferred_type != Type::Bool {
+            return Err(TypeError::TypeMismatch {
+                expected: Type::Bool,
+                found: inferred_type
+            })
+        }
+
+        self.check_block(body)
+    }
+    
     fn check_assign_stmt(
         &mut self,
         identifier: &str,
