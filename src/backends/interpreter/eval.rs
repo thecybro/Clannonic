@@ -814,6 +814,53 @@ impl Interpreter {
                     }
                 }
             },
+
+            (Value::Boolean(left), Value::Boolean(right)) => {
+                match operator {
+                    ComparisonOp::IsEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(
+                                bool_type_to_raw(left) == 
+                                bool_type_to_raw(right)))
+                        )
+                    },
+                    ComparisonOp::IsNotEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(
+                                bool_type_to_raw(left) != 
+                                bool_type_to_raw(right)))
+                        )
+                    },
+                    ComparisonOp::IsGreaterThan => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(
+                                bool_type_to_raw(left) > 
+                                bool_type_to_raw(right)))
+                        )
+                    },
+                    ComparisonOp::IsLessThan => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(
+                                bool_type_to_raw(left) < 
+                                bool_type_to_raw(right)))
+                        )
+                    },
+                    ComparisonOp::IsGreaterOrEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(
+                                bool_type_to_raw(left) >= 
+                                bool_type_to_raw(right)))
+                        )
+                    },
+                    ComparisonOp::IsLessOrEqualTo => {
+                        Ok(Value::Boolean
+                            (bool_raw_to_type(
+                                bool_type_to_raw(left) <= 
+                                bool_type_to_raw(right)))
+                        )
+                    }
+                } 
+            }
             (left, right) => {
                 return Err(
                     EvalError::InvalidComparisonOperation {
