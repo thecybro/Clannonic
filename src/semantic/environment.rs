@@ -60,8 +60,4 @@ impl TypeEnvironment {
             .rev()
             .find_map(|scope| scope.get(name).copied())
     }
-
-    pub fn lookup_mut(&self, name: &str) -> Option<Binding> {
-        self.lookup(name)
-    }
 }

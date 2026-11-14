@@ -71,6 +71,12 @@ impl TypeChecker {
                 expression 
             } => self.check_let_stmt(identifier, *mutable, *annotation, expression),
 
+            Stmt::Assign {
+                identifier,
+                operator,
+                expression
+            } => self.check_assign_stmt(identifier, *operator, expression),
+            
             Stmt::If { condition, body } => self.check_if_stmt(condition, body),
 
             Stmt::While { condition, body } => self.check_while_stmt(condition, body),
@@ -81,21 +87,13 @@ impl TypeChecker {
                 return_type,
                 body,
             } => self.check_function_body(name, parameters, *return_type, body),
-
-            Stmt::Assign {
-                identifier,
-                operator,
-                expression
-            } => self.check_assign_stmt(identifier, *operator, expression),
             
             Stmt::Return(expression) => self.check_return_stmt(expression),
 
             Stmt::Expression(expression) => {
                 self.check_expression(expression)?;
                 Ok(())
-            },
-            
-            _ => todo!()
+            }            
         }
     }
 
@@ -240,7 +238,7 @@ impl TypeChecker {
         expression: &Expr,
     ) -> Result<()> {
 
-        let stored_ident = match self.environment.lookup_mut(identifier) {
+        let stored_ident = match self.environment.lookup(identifier) {
             Some(name) => name,
             None => {
                 return Err(TypeError::UndefinedVariable(identifier.to_string()))
@@ -269,34 +267,45 @@ impl TypeChecker {
     fn check_function_body(
         &mut self,
         name: &str,
-        parameters: &Box<[FunctionParameter]>,
+        parameters: &[FunctionParameter],
         return_type: Type,
         body: &[Stmt]
     ) -> Result<()> {
         // println!("Checking function body now");
         self.environment.enter_scope();
 
-        for param in parameters {
-            self.environment.define(
-                param.name.clone(),
-                Binding {
-                    ty: param.data_type,
-                    mutable: false,
-                }
-            )?
-        }
+        let prev_return_type = self.curr_ret_type
+            .replace(return_type);
 
-        let prev_ret_type = self.curr_ret_type.replace(return_type);
+        // Do the parameter binding and statement checking inside an isolated block
+        // so if either fails, we can exit from this block and exit the scope
+        // afterwards
+        // 
+        // Which wasn't the case when we were doing the param binding and stmt checking
+        // inside the main function scope, which could result in an unexited scope,
+        // affecting other methods relying on the scopes
+        let result = (|| {
+            for parameter in parameters {
+                self.environment.define(
+                    parameter.name.clone(),
+                    Binding {
+                        ty: parameter.data_type,
+                        mutable: false,
+                    },
+                )?;
+            }
 
-        for stmt in body {
-            // println!("Checking following statement present inside function body: \n{stmt:#?}");
-            self.check_statement(stmt)?;
-        }
+            for statement in body {
+                self.check_statement(statement)?;
+            }
 
-        self.curr_ret_type = prev_ret_type;
+            Ok(())
+        })();
+
+        self.curr_ret_type = prev_return_type;
         self.environment.exit_scope();
 
-        Ok(())
+        result
     }
 
     fn check_return_stmt(
