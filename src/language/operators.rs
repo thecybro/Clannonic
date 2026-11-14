@@ -9,11 +9,11 @@ pub enum AssignOp {
 }
 
 impl AssignOp {
-    pub fn return_type(
+    pub fn validates(
         self,
         left: Type,
         right: Type,
-    ) -> Option<Type> {
+    ) -> bool {
         match self {
             AssignOp::AddAssign
             | AssignOp::SubtractAssign => 
@@ -28,17 +28,22 @@ impl AssignOp {
                 // convert the assignment operator to the corresponding
                 // arithmetic operator and let it tell whether or not
                 // the operation is valid
-                arith_op
-                    .result_type(left, right)
+                if let Some(_) = arith_op.result_type(left, right) {
+                    true
+                } else {
+                    false
+                }
             }
 
             AssignOp::Assign 
-                if left == Type::Int && right == Type::Int => 
+            // When assigning, all we care about is left should be the same as right,
+            // and we dont care whether left is int, bool or whatever
+                if left == right => 
             {
-                Some(Type::Int)
+                true
             }
 
-            _ => None,
+            _ => false,
         }
     }
 }
