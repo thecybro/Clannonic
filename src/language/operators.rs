@@ -69,7 +69,13 @@ impl ComparisonOp {
         match self {
             ComparisonOp::IsEqualTo
             | ComparisonOp::IsNotEqualTo
-            | ComparisonOp::IsGreaterThan
+                if left == right 
+                && matches!(left, Type::Int | Type::Bool)=>
+            {
+                Some(Type::Bool)
+            }
+
+            ComparisonOp::IsGreaterThan
             | ComparisonOp::IsLessThan
             | ComparisonOp::IsGreaterOrEqualTo
             | ComparisonOp::IsLessOrEqualTo
