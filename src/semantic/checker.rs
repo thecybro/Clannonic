@@ -147,11 +147,13 @@ impl TypeChecker {
         body: &[Stmt]
     ) -> Result<()> {
 
+        self.environment.enter_scope();
+        
         let result = body
             .iter()
             .try_for_each(|statement| self.check_statement(statement));
 
-        self.environment.enter_scope();
+        self.environment.exit_scope();
 
         result
     }
