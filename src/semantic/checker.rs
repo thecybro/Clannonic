@@ -1,7 +1,21 @@
 
 use std::collections::HashMap;
 
-use crate::{ArithmeticOp, ComparisonOp, Expr, FunctionParameter, Program, Stmt, Type, language::AssignOp};
+use crate::{ 
+    Expr, 
+    FunctionParameter, 
+    Program, 
+    Stmt, 
+    Type, 
+
+    language::{
+        ArithmeticOp, 
+        ComparisonOp,
+        AssignOp,
+        UnaryFixity,
+        UnaryOp
+    }
+};
 
 use super::{Result, TypeError, TypeEnvironment, Binding};
 
@@ -94,7 +108,10 @@ impl TypeChecker {
                     .ok_or_else(|| TypeError::UndefinedVariable(name.clone()))
             },
 
-            Expr::FunctionCall { name, arguments } => self.check_function_call_expression(name, arguments),
+            Expr::FunctionCall { 
+                name, 
+                arguments 
+            } => self.check_function_call_expression(name, arguments),
             
             Expr::Arithmetic { 
                 left, 
@@ -106,7 +123,13 @@ impl TypeChecker {
                 left, 
                 operator, 
                 right 
-            } => self.check_conditional_expression(left, *operator, right),
+            } => self.check_comparison_expression(left, *operator, right),
+
+            Expr::Unary {
+                operator,
+                operand,
+                fixity
+            } => self.check_unary_expression(*operator, operand, *fixity),
 
             _ => todo!()
         }
@@ -189,31 +212,18 @@ impl TypeChecker {
             return Err(TypeError::ImmutableAssignment(identifier.to_string()))
         }
 
-        let inferred_type = match operator {
-            AssignOp::AddAssign | AssignOp::SubtractAssign => {
-                let arithmetic_operator = if operator == AssignOp::AddAssign {
-                    ArithmeticOp::Add
-                } else {
-                    ArithmeticOp::Subtract
-                };
-
-                let left = Expr::Identifier(identifier.to_string());
-
-                self.check_arithmetic_expression(&left, arithmetic_operator, expression)?
-            },
-            AssignOp::Assign => {self.check_expression(expression)?}
-        };
-
         let ident_type = stored_ident.ty;
-    
-        if inferred_type != ident_type {
-            return Err(TypeError::TypeMismatch {
+        let right_type = self.check_expression(expression)?;
+
+        // The operator owns the rule, so we just ask it for return type
+        // if the types are valid for assignment operation
+        operator
+            .return_type(ident_type, right_type)
+            .ok_or(TypeError::TypeMismatch {
                 expected: ident_type,
-                found: inferred_type
+                found: right_type
             })
-        }
-        
-        Ok(())
+            .map(|_| ())        
     }
     
     fn check_function_body(
@@ -305,28 +315,18 @@ impl TypeChecker {
         let left_type = self.check_expression(left)?;
         let right_type = self.check_expression(right)?;
 
-        // It is a valid binary operation only if we are apply the binary operators
-        // where the lhs and rhs are same (yet to write the checks for other operators)
-        match (left_type, operator, right_type) {
-            (Type::Int, ArithmeticOp::Add, Type::Int)
-            | (Type::Int, ArithmeticOp::Subtract, Type::Int)
-            | (Type::Int, ArithmeticOp::Multiply, Type::Int)
-            | (Type::Int, ArithmeticOp::Divide, Type::Int)
-            => {
-                // println!("The return statement is a valid binary operation");
-                Ok(Type::Int)
-            },
-            (left, operator, right) => {
-                return Err(TypeError::InvalidArithmeticOperation {
-                    left,
-                    operator: operator,
-                    right,
-                })
-            }
-        }        
+        // The operator owns the rule, so we just call it to know whether or not these
+        // types form valid arithmetic operation
+        operator
+            .result_type(left_type, right_type)
+            .ok_or(TypeError::InvalidArithmeticOperation {
+                left: left_type,
+                operator,
+                right: right_type
+            })
     }
 
-    fn check_conditional_expression(
+    fn check_comparison_expression(
         &mut self,
         left: &Expr,
         operator: ComparisonOp,
@@ -336,24 +336,30 @@ impl TypeChecker {
         let left_type = self.check_expression(left)?;
         let right_type = self.check_expression(right)?;
 
-        match (left_type, operator, right_type) {
-            (Type::Int, ComparisonOp::IsEqualTo, Type::Int) 
-            | (Type::Int, ComparisonOp::IsNotEqualTo, Type::Int) 
-            | (Type::Int, ComparisonOp::IsGreaterThan, Type::Int) 
-            | (Type::Int, ComparisonOp::IsLessThan, Type::Int) 
-            | (Type::Int, ComparisonOp::IsGreaterOrEqualTo, Type::Int) 
-            | (Type::Int, ComparisonOp::IsLessOrEqualTo, Type::Int) 
-            => {
-                Ok(Type::Bool)
-            },
-            (left, operator, right) => {
-                return Err(TypeError::InvalidComparisonOperation {
-                    left,
-                    operator: operator,
-                    right,
-                })
-            }
-        }
+        operator
+            .return_type(left_type, right_type)
+            .ok_or(TypeError::InvalidComparisonOperation {
+                left: left_type,
+                operator: operator,
+                right: right_type,
+            })
+    }
+
+    fn check_unary_expression(
+        &mut self,
+        operator: UnaryOp,
+        operand: &Expr,
+        fixity: UnaryFixity
+    ) -> Result<Type> {
+
+        let operand_type = self.check_expression(operand)?;
+
+        operator
+            .return_type(operand_type, fixity)
+            .ok_or(TypeError::InvalidUnaryOperation {
+                operator,
+                found: operand_type
+            })
     }
 }
 
