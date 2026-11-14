@@ -5,13 +5,22 @@ use crate::language::Type;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TokenKind {
+    /// foo
     Identifier, 
 
+    /// 1, 2 etc
     IntegerLiteral,
+
+    /// 1.0, 2.0, 3.5 etc
     FloatLiteral,
+
+    /// "a_string", "smt"
     StringLiteral,
+
+    /// true, false
     BooleanLiteral(BooleanVal), // This is for the boolean values; not boolean data type
 
+    /// [`Keyword`]
     Keyword(Keyword),
     
     Plus,
@@ -66,17 +75,43 @@ pub enum BooleanVal {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Keyword {
-    Let, // Done
-    Mut, // let mut x = 10
-    For,
-    While, // Done
-    
-    Fn, // done (partially)
-    If, // Done
-    Else,
-    Return, // done
+    /// eg: `let x = 10`
+    Let,
 
-    // This is the variant for the reserved data type lexeme
-    // like int, String, bool, etc 
+    /// let mut x = 10
+    Mut, 
+    For,
+
+    /// ```no_run
+    /// while true {
+    ///     // body here
+    /// }
+    /// ```
+    While,
+
+    /// ```no_run
+    /// fn add(a: int, b: int) -> int {
+    ///     return a + b;
+    /// }
+    /// ```
+    Fn, 
+
+    /// ```no_run
+    /// if true {
+    ///     // body here
+    /// }
+    /// ```
+    If, 
+    Else,
+
+    /// ```no_run
+    /// fn add(a: int, b: int) -> int {
+    ///     return a + b;
+    /// }
+    /// ```
+    Return, 
+
+    /// This is the variant for the reserved data type lexeme
+    /// like int, String, bool, etc 
     Type(Type),
 }

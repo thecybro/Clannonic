@@ -119,16 +119,16 @@ impl<'a> Parser<'a> {
             
             TokenKind::Identifier => {
                 if self.peek_assign_operator().is_some() {
-                    self.parse_assign_stmt()
+                    return self.parse_assign_stmt()
                 } else {
-                    Ok(Stmt::Expression(self.parse_expression()?))
+                    return Ok(self.parse_expression_stmt()?)
                 }
             },
 
             _ => {
                 let curr_lexeme = self.curr_lexeme()?;
                 return Err(ParseError::KeywordNotSupported(
-                    format!("'{curr_lexeme}' is not a supported keyword!")
+                    format!("'{curr_lexeme}' doesn't start a valid statement/expression")
                 ))
             }
         }
@@ -153,7 +153,7 @@ impl<'a> Parser<'a> {
 
         let expression = self.parse_expression()?;
 
-        self.expect(TokenKind::SemiColon)?;
+        self.expect_semicolon()?;
         
         Ok(Stmt::Let {
             identifier,
@@ -173,7 +173,7 @@ impl<'a> Parser<'a> {
         
         let expression = self.parse_expression()?;
 
-        self.expect(TokenKind::SemiColon)?;
+        self.expect_semicolon()?;
         
         Ok(
             Stmt::Assign {
@@ -262,15 +262,29 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_return_stmt(&mut self) -> Result<Stmt> {
-        self.expect(TokenKind::Keyword(Keyword::Return))?;
-
+        self.expect_keyword(Keyword::Return)?;
+        
         let value = self.parse_expression()?;
 
-        self.expect(TokenKind::SemiColon)?;
+        self.expect_semicolon()?;
         
         Ok(
             Stmt::Return(Some(value))
         )
+    }
+
+    fn parse_expression_stmt(&mut self) -> Result<Stmt> {
+        if self.at(TokenKind::Identifier) {
+            let expr = self.parse_expression()?;
+
+            self.expect_semicolon()?;
+
+            Ok(Stmt::Expression(expr))
+        } else {
+            return Err(ParseError::TokenExpected(
+                format!("Expected an identifier to form an expression statement!")
+            ))
+        }
     }
 }
 
@@ -529,6 +543,7 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[allow(unused)]
 /// Major complimentary helpers method that do much of the work
 impl<'a> Parser<'a> {
     fn parse_comma_separated<T, F>(
@@ -693,6 +708,7 @@ impl<'a> Parser<'a> {
     }    
 }
 
+#[allow(unused)]
 /// Specific token related helpers
 impl<'a> Parser<'a> {
     /// We expect a certain kind.
@@ -751,6 +767,29 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Consume and return the data type if we got it.
+    /// But throw an error if there is no data type currently
+    fn expect_type(&mut self) -> Result<Type> {
+        self.take_type().ok_or_else(|| {
+            ParseError::TokenExpected(
+                "Expected a data type (eg: int, float, sting)".to_string()
+            )
+        })
+    }
+
+    
+    fn expect_assign_operator(&mut self) -> Result<AssignOp> {
+        self.take_assign_operator().ok_or_else(|| {
+            ParseError::TokenExpected(
+                "Expected an assign operator (eg: =, +=, -=)".to_string()
+            )
+        })
+    }
+
+    fn expect_semicolon(&mut self) -> Result<()> {
+        self.expect(TokenKind::SemiColon)
+    }
+    
     /// Keyword data type means int, float etc
     fn current_type(&self) -> Option<Type> {
         match self.current_kind()? {
@@ -815,25 +854,6 @@ impl<'a> Parser<'a> {
         } else {
             false
         }
-    }
-    
-    /// Consume and return the data type if we got it.
-    /// But throw an error if there is no data type currently
-    fn expect_type(&mut self) -> Result<Type> {
-        self.take_type().ok_or_else(|| {
-            ParseError::TokenExpected(
-                "Expected a data type (eg: int, float, sting)".to_string()
-            )
-        })
-    }
-
-    
-    fn expect_assign_operator(&mut self) -> Result<AssignOp> {
-        self.take_assign_operator().ok_or_else(|| {
-            ParseError::TokenExpected(
-                "Expected an assign operator (eg: =, +=, -=)".to_string()
-            )
-        })
     }
 }
 
