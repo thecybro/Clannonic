@@ -1,9 +1,11 @@
 
+use crate::frontend::Expr;
+
 use crate::{ArithmeticOp, Type, language::{ComparisonOp, UnaryOp}};
 
 pub(super) type Result<T> = std::result::Result<T, TypeError>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TypeError {
     UndefinedVariable(String),
 
@@ -15,6 +17,8 @@ pub enum TypeError {
     
     ImmutableAssignment(String),
 
+    UnsupportedExpression(Expr),
+    
     TypeMismatch {
         expected: Type,
         found: Type

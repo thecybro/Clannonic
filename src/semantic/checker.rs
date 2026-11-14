@@ -136,7 +136,10 @@ impl TypeChecker {
                 fixity
             } => self.check_unary_expression(*operator, operand, *fixity),
 
-            _ => todo!()
+            // Other expressions such as float/string are not yet supported in the
+            // current minimal build; even though the interpreter can actually
+            // evaluate those
+            _ => return Err(TypeError::UnsupportedExpression(expression.clone()))
         }
     }
 }
@@ -268,7 +271,7 @@ impl TypeChecker {
     
     fn check_function_body(
         &mut self,
-        name: &str,
+        _name: &str,
         parameters: &[FunctionParameter],
         return_type: Type,
         body: &[Stmt]
@@ -297,8 +300,28 @@ impl TypeChecker {
                 )?;
             }
 
+            // We look at whether any return type is declared to be returned by the function
+            // and later check if we actually returned anything or not; if the type was declared
+            // 
+            // We dont have to check if the types actually match (if return statement is present)
+            // because return statement does that itself
+            let requires_return = return_type != Type::Unit;
+
+            let mut saw_return = false;
+            
             for statement in body {
+                if matches!(statement, Stmt::Return(_)) {
+                    saw_return = true;
+                }
+
                 self.check_statement(statement)?;
+            }
+
+            if requires_return && !saw_return {
+                return Err(TypeError::InvalidReturnType {
+                    expected: return_type,
+                    found: Type::Unit
+                })
             }
 
             Ok(())
