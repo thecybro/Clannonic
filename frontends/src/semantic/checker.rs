@@ -1,25 +1,13 @@
-
 use std::collections::HashMap;
 
-use crate::{ 
-    Expr, 
-    FunctionParameter, 
-    Program, 
-    Stmt, 
-    Type, 
-
-    language::{
-        ArithmeticOp, 
-        ComparisonOp,
-        AssignOp,
-        UnaryFixity,
-        UnaryOp
-    }
+use crate::parser::{RawExpr, RawFunctionParameter, RawProgram, RawStmt};
+use crate::{
+    Type,
+    language::{ArithmeticOp, AssignOp, ComparisonOp, UnaryFixity, UnaryOp},
 };
 
+use super::environment::{Binding, TypeEnvironment};
 use super::error::{Result, TypeError};
-use super::environment::{TypeEnvironment, Binding};
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeChecker {
@@ -42,16 +30,13 @@ impl TypeChecker {
             curr_ret_type: None,
         }
     }
-    
-    pub fn check_program(
-        &mut self,
-        program: &Program,
-    ) -> Result<()> {            
+
+    pub fn check_program(&mut self, program: &RawProgram) -> Result<()> {
         for stmt in program.ast.iter() {
             // println!("Collecting function signatures");
             self.collect_function_signature(stmt)?;
         }
-            
+
         for stmt in program.ast.iter() {
             // println!("Checking statements");
             self.check_statement(stmt)?;
@@ -59,100 +44,88 @@ impl TypeChecker {
 
         Ok(())
     }
-    
-    fn check_statement(
-        &mut self,
-        statement: &Stmt,
-    ) -> Result<()> {
+
+    fn check_statement(&mut self, statement: &RawStmt) -> Result<()> {
         match statement {
-            Stmt::Let { 
-                identifier, 
-                mutable, 
-                annotation, 
-                expression 
+            RawStmt::Let {
+                identifier,
+                mutable,
+                annotation,
+                expression,
             } => self.check_let_stmt(identifier, *mutable, *annotation, expression),
 
-            Stmt::Assign {
+            RawStmt::Assign {
                 identifier,
                 operator,
-                expression
+                expression,
             } => self.check_assign_stmt(identifier, *operator, expression),
-            
-            Stmt::If { condition, body } => self.check_if_stmt(condition, body),
 
-            Stmt::While { condition, body } => self.check_while_stmt(condition, body),
-            
-            Stmt::Function {
+            RawStmt::If { condition, body } => self.check_if_stmt(condition, body),
+
+            RawStmt::While { condition, body } => self.check_while_stmt(condition, body),
+
+            RawStmt::Function {
                 name,
                 parameters,
                 return_type,
                 body,
             } => self.check_function_body(name, parameters, *return_type, body),
-            
-            Stmt::Return(expression) => self.check_return_stmt(expression),
 
-            Stmt::Expression(expression) => {
+            RawStmt::Return(expression) => self.check_return_stmt(expression),
+
+            RawStmt::Expression(expression) => {
                 self.check_expression(expression)?;
                 Ok(())
-            }            
+            }
         }
     }
 
-    fn check_expression(
-        &mut self,
-        expression: &Expr,
-    ) -> Result<Type> {
+    fn check_expression(&mut self, expression: &RawExpr) -> Result<Type> {
         match expression {
-            Expr::Integer(_) => Ok(Type::Int),
+            RawExpr::Integer(_) => Ok(Type::Int),
 
-            Expr::Boolean(_) => Ok(Type::Bool),
+            RawExpr::Boolean(_) => Ok(Type::Bool),
 
-            Expr::Identifier(name) => {
-                self.environment
-                    .lookup(name)
-                    .map(|binding| binding.ty)
-                    .ok_or_else(|| TypeError::UndefinedVariable(name.clone()))
-            },
+            RawExpr::Identifier(name) => self
+                .environment
+                .lookup(name)
+                .map(|binding| binding.ty)
+                .ok_or_else(|| TypeError::UndefinedVariable(name.clone())),
 
-            Expr::FunctionCall { 
-                name, 
-                arguments 
-            } => self.check_function_call_expression(name, arguments),
-            
-            Expr::Arithmetic { 
-                left, 
-                operator, 
-                right 
+            RawExpr::FunctionCall { name, arguments } => {
+                self.check_function_call_expression(name, arguments)
+            }
+
+            RawExpr::Arithmetic {
+                left,
+                operator,
+                right,
             } => self.check_arithmetic_expression(left, *operator, right),
 
-            Expr::Comparison { 
-                left, 
-                operator, 
-                right 
+            RawExpr::Comparison {
+                left,
+                operator,
+                right,
             } => self.check_comparison_expression(left, *operator, right),
 
-            Expr::Unary {
+            RawExpr::Unary {
                 operator,
                 operand,
-                fixity
+                fixity,
             } => self.check_unary_expression(*operator, operand, *fixity),
 
             // Other expressions such as float/string are not yet supported in the
             // current minimal build; even though the interpreter can actually
             // evaluate those
-            _ => return Err(TypeError::UnsupportedExpression(expression.clone()))
+            _ => return Err(TypeError::UnsupportedExpression(expression.clone())),
         }
     }
 }
 
 impl TypeChecker {
-    fn check_block(
-        &mut self,
-        body: &[Stmt]
-    ) -> Result<()> {
-
+    fn check_block(&mut self, body: &[RawStmt]) -> Result<()> {
         self.environment.enter_scope();
-        
+
         let result = body
             .iter()
             .try_for_each(|statement| self.check_statement(statement));
@@ -161,98 +134,84 @@ impl TypeChecker {
 
         result
     }
-    
+
     fn check_let_stmt(
         &mut self,
         identifier: &str,
         mutable: bool,
         annotation: Option<Type>,
-        expression: &Expr
+        expression: &RawExpr,
     ) -> Result<()> {
-
         // println!("Got following details: ");
         // println!("Ident: {identifier}\nMutable: {mutable}\nAnnotation: {annotation:#?}\nExpression: {expression:#?}");
-        
+
         let inferred_type = self.check_expression(expression)?;
-        
+
         let variable_type = if let Some(annotation) = annotation {
             if annotation != inferred_type {
                 return Err(TypeError::TypeMismatch {
                     expected: annotation,
-                    found: inferred_type
+                    found: inferred_type,
                 });
             }
             annotation
         } else {
-          inferred_type  
+            inferred_type
         };
 
         // println!("\nInferred following:\n");
         // println!("Type: {inferred_type:#?}\n");
-        
+
         self.environment.define(
             identifier.to_string(),
             Binding {
                 ty: variable_type,
-                mutable
-            }
+                mutable,
+            },
         )?;
-        
+
         Ok(())
     }
 
-    fn check_if_stmt(
-        &mut self,
-        expression: &Expr,
-        body: &Box<[Stmt]>
-    ) -> Result<()> {
-
+    fn check_if_stmt(&mut self, expression: &RawExpr, body: &Box<[RawStmt]>) -> Result<()> {
         let inferred_type = self.check_expression(expression)?;
 
         if inferred_type != Type::Bool {
             return Err(TypeError::TypeMismatch {
                 expected: Type::Bool,
-                found: inferred_type
-            })
+                found: inferred_type,
+            });
         }
 
         self.check_block(body)
     }
 
-    fn check_while_stmt(
-        &mut self,
-        condition: &Expr,
-        body: &[Stmt],
-    ) -> Result<()> {
-
+    fn check_while_stmt(&mut self, condition: &RawExpr, body: &[RawStmt]) -> Result<()> {
         let inferred_type = self.check_expression(condition)?;
 
         if inferred_type != Type::Bool {
             return Err(TypeError::TypeMismatch {
                 expected: Type::Bool,
-                found: inferred_type
-            })
+                found: inferred_type,
+            });
         }
 
         self.check_block(body)
     }
-    
+
     fn check_assign_stmt(
         &mut self,
         identifier: &str,
         operator: AssignOp,
-        expression: &Expr,
+        expression: &RawExpr,
     ) -> Result<()> {
-
         let stored_ident = match self.environment.lookup(identifier) {
             Some(name) => name,
-            None => {
-                return Err(TypeError::UndefinedVariable(identifier.to_string()))
-            }
+            None => return Err(TypeError::UndefinedVariable(identifier.to_string())),
         };
 
         if !stored_ident.mutable {
-            return Err(TypeError::ImmutableAssignment(identifier.to_string()))
+            return Err(TypeError::ImmutableAssignment(identifier.to_string()));
         }
 
         let ident_type = stored_ident.ty;
@@ -265,28 +224,27 @@ impl TypeChecker {
         } else {
             Err(TypeError::TypeMismatch {
                 expected: ident_type,
-                found: right_type
+                found: right_type,
             })
         }
     }
-    
+
     fn check_function_body(
         &mut self,
         _name: &str,
-        parameters: &[FunctionParameter],
+        parameters: &[RawFunctionParameter],
         return_type: Type,
-        body: &[Stmt]
+        body: &[RawStmt],
     ) -> Result<()> {
         // println!("Checking function body now");
         self.environment.enter_scope();
 
-        let prev_return_type = self.curr_ret_type
-            .replace(return_type);
+        let prev_return_type = self.curr_ret_type.replace(return_type);
 
         // Do the parameter binding and statement checking inside an isolated block
         // so if either fails, we can exit from this block and exit the scope
         // afterwards
-        // 
+        //
         // Which wasn't the case when we were doing the param binding and stmt checking
         // inside the main function scope, which could result in an unexited scope,
         // affecting other methods relying on the scopes
@@ -303,15 +261,15 @@ impl TypeChecker {
 
             // We look at whether any return type is declared to be returned by the function
             // and later check if we actually returned anything or not; if the type was declared
-            // 
+            //
             // We dont have to check if the types actually match (if return statement is present)
             // because return statement does that itself
             let requires_return = return_type != Type::Unit;
 
             let mut saw_return = false;
-            
+
             for statement in body {
-                if matches!(statement, Stmt::Return(_)) {
+                if matches!(statement, RawStmt::Return(_)) {
                     saw_return = true;
                 }
 
@@ -321,8 +279,8 @@ impl TypeChecker {
             if requires_return && !saw_return {
                 return Err(TypeError::InvalidReturnType {
                     expected: return_type,
-                    found: Type::Unit
-                })
+                    found: Type::Unit,
+                });
             }
 
             Ok(())
@@ -334,27 +292,19 @@ impl TypeChecker {
         result
     }
 
-    fn check_return_stmt(
-        &mut self,
-        expression: &Option<Expr>
-    ) -> Result<()> {
-
-        let expected = self.curr_ret_type
-            .ok_or(TypeError::ReturnOutsideFunction)?;
+    fn check_return_stmt(&mut self, expression: &Option<RawExpr>) -> Result<()> {
+        let expected = self.curr_ret_type.ok_or(TypeError::ReturnOutsideFunction)?;
 
         let found = match expression {
             Some(expr) => {
                 // println!("Trying to check the expression we got in return statement");
                 self.check_expression(expr)?
-            },
+            }
             None => Type::Unit,
         };
 
         if expected != found {
-            return Err(TypeError::InvalidReturnType { 
-                expected, 
-                found 
-            });
+            return Err(TypeError::InvalidReturnType { expected, found });
         }
 
         Ok(())
@@ -363,9 +313,8 @@ impl TypeChecker {
     fn check_function_call_expression(
         &mut self,
         name: &str,
-        arguments: &[Expr],
+        arguments: &[RawExpr],
     ) -> Result<Type> {
-
         let function = self
             .lookup_function(name)
             .ok_or_else(|| TypeError::UndefinedFunction(name.to_string()))?
@@ -374,13 +323,12 @@ impl TypeChecker {
         if arguments.len() != function.parameters.len() {
             return Err(TypeError::WrongArgumentCount {
                 expected: function.parameters.len(),
-                found: arguments.len()
-            })
+                found: arguments.len(),
+            });
         }
 
-        for (index, (argument, expected_type)) in arguments.iter()
-            .zip(function.parameters.iter())
-            .enumerate()
+        for (index, (argument, expected_type)) in
+            arguments.iter().zip(function.parameters.iter()).enumerate()
         {
             let found_type = self.check_expression(argument)?;
 
@@ -388,21 +336,20 @@ impl TypeChecker {
                 return Err(TypeError::InvalidArgumentType {
                     parameter: index,
                     expected: *expected_type,
-                    found: found_type
-                })
+                    found: found_type,
+                });
             }
         }
-        
+
         Ok(function.return_type)
     }
 
     fn check_arithmetic_expression(
         &mut self,
-        left: &Expr,
+        left: &RawExpr,
         operator: ArithmeticOp,
-        right: &Expr
+        right: &RawExpr,
     ) -> Result<Type> {
-
         let left_type = self.check_expression(left)?;
         let right_type = self.check_expression(right)?;
 
@@ -413,17 +360,16 @@ impl TypeChecker {
             .ok_or(TypeError::InvalidArithmeticOperation {
                 left: left_type,
                 operator,
-                right: right_type
+                right: right_type,
             })
     }
 
     fn check_comparison_expression(
         &mut self,
-        left: &Expr,
+        left: &RawExpr,
         operator: ComparisonOp,
-        right: &Expr
+        right: &RawExpr,
     ) -> Result<Type> {
-
         let left_type = self.check_expression(left)?;
         let right_type = self.check_expression(right)?;
 
@@ -439,17 +385,16 @@ impl TypeChecker {
     fn check_unary_expression(
         &mut self,
         operator: UnaryOp,
-        operand: &Expr,
-        fixity: UnaryFixity
+        operand: &RawExpr,
+        fixity: UnaryFixity,
     ) -> Result<Type> {
-
         let operand_type = self.check_expression(operand)?;
 
         operator
             .return_type(operand_type, fixity)
             .ok_or(TypeError::InvalidUnaryOperation {
                 operator,
-                found: operand_type
+                found: operand_type,
             })
     }
 }
@@ -459,51 +404,42 @@ impl TypeChecker {
         &mut self,
         name: String,
         parameters: &Box<[Type]>,
-        return_type: Type
+        return_type: Type,
     ) -> Result<()> {
-
         if self.functions.contains_key(&name) {
-            return Err(TypeError::DuplicateFunctionDeclaration(name))
+            return Err(TypeError::DuplicateFunctionDeclaration(name));
         }
 
         self.functions.insert(
             name.clone(),
             FunctionSignature {
                 parameters: parameters.clone(),
-                return_type
-            }  
+                return_type,
+            },
         );
 
         Ok(())
     }
 
     fn lookup_function(&self, name: &str) -> Option<&FunctionSignature> {
-        self.functions
-            .get(name)
+        self.functions.get(name)
     }
-    
-    fn collect_function_signature(
-        &mut self,
-        statement: &Stmt
-    ) -> Result<()> {
+
+    fn collect_function_signature(&mut self, statement: &RawStmt) -> Result<()> {
         match statement {
-            Stmt::Function {
+            RawStmt::Function {
                 name,
                 parameters,
                 return_type,
-                body
+                body,
             } => {
                 let mut params = Vec::new();
                 for param in parameters.iter() {
                     params.push(param.data_type)
                 }
-                self.define_function(
-                    name.clone(),
-                    &params.into_boxed_slice(),
-                    *return_type
-                )
-            },
-            _ => Ok(())
+                self.define_function(name.clone(), &params.into_boxed_slice(), *return_type)
+            }
+            _ => Ok(()),
         }
     }
 }

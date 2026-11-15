@@ -1,5 +1,5 @@
 
-use crate::Expr;
+use crate::RawExpr;
 
 use crate::{ArithmeticOp, Type, language::{ComparisonOp, UnaryOp}};
 
@@ -17,7 +17,7 @@ pub enum TypeError {
     
     ImmutableAssignment(String),
 
-    UnsupportedExpression(Expr),
+    UnsupportedExpression(RawExpr),
     
     TypeMismatch {
         expected: Type,

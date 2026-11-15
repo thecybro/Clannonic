@@ -1,144 +1,80 @@
+use crate::language::{ArithmeticOp, AssignOp, ComparisonOp, Type, UnaryFixity, UnaryOp};
 
-use crate::language::{
-    ArithmeticOp,
-    ComparisonOp,
-    UnaryFixity,
-    UnaryOp,
-    AssignOp,
-    Type,
-};
 use super::BooleanVal;
 
-/// The types of expressions supported
+/// Syntax tree produced directly by the parser.
+///
+/// Raw nodes may still refer to undeclared names, contain invalid type
+/// combinations, and call unknown functions. They must be checked by the
+/// semantic phase before being passed to a backend.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum Expr {
-    Float(f64), 
+pub enum RawExpr {
     Integer(i64),
-    Identifier(String),
+    Float(f64),
     String(String),
-    Boolean(BooleanVal), 
+    Identifier(String),
+    Boolean(BooleanVal),
     Comparison {
-        /// The reason we use Expr instead of Identifier
-        /// because we might have to compare between
-        /// any 2 expressions as well, like 
-        /// ```no_run
-        /// (a + b) >= (c + d)
-        /// ```
-        /// 
-        /// here, the individual arithmetic operation expressions like
-        /// (a + b) and (c + d) would ultimately be converted into an
-        /// identifier or number but if we had made the left and right hand
-        /// sides as not Expr, users wouldn't be able to write that
-        left: Box<Expr>,
+        left: Box<RawExpr>,
         operator: ComparisonOp,
-        right: Box<Expr>
+        right: Box<RawExpr>,
     },
     Arithmetic {
-        /// Obviously the reason we used Expr is because
-        /// we need to have an AST which has the operations/
-        /// expressions in their own respective nodes,
-        /// 
-        /// If we had made it 'left: TokenKind' instead of 
-        /// `left: Box<Expr>`, we would be supporting only one 
-        /// arithmetic operation chain.
-        /// 
-        /// For example:
-        /// ```no_run
-        /// // In the case of left/right: TokenKind
-        /// let x = a + b // valid
-        /// let x = a + b - c // invalid
-        /// 
-        /// // In the case of left/right: Box<Expr>
-        /// let x = a + b // valid
-        /// let x = a + b - c //valid
-        /// 
-        /// // And we can make this chain as long as we want,
-        /// // like this is also perfectly valid:
-        /// 
-        /// let x = a + b - c * d / e
-        /// 
-        /// // Note tha the space between the expressions is not necessary,
-        /// // like we can write this as well
-        /// 
-        /// let x = a+b-c*d/e // perfectly valid
-        /// ```
-        left: Box<Expr>,
+        left: Box<RawExpr>,
         operator: ArithmeticOp,
-        right: Box<Expr>,
+        right: Box<RawExpr>,
     },
     Unary {
         operator: UnaryOp,
-        operand: Box<Expr>,
+        operand: Box<RawExpr>,
         fixity: UnaryFixity,
     },
-    /// A function call expression means using a function that has been implemented
-    /// For example:
-    /// ```no run
-    /// 
-    /// let x = main()
-    /// ```
-    /// 
-    /// Here, the expression is the main() part, whereas the whole line is a let statement
     FunctionCall {
         name: String,
-        arguments: Box<[Expr]>,
-    }
+        arguments: Box<[RawExpr]>,
+    },
 }
 
-/// The supported statements and their structures
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum Stmt {
+pub enum RawStmt {
     Let {
         identifier: String,
         mutable: bool,
         annotation: Option<Type>,
-        expression: Expr
+        expression: RawExpr,
     },
     Assign {
-      identifier: String,
-      operator: AssignOp,
-      expression: Expr  
+        identifier: String,
+        operator: AssignOp,
+        expression: RawExpr,
     },
-    // I think the support for else if or elif branches is also
-    // important here and they should have their own body instead
-    // of the if statement having a single body
     If {
-        condition: Expr,
-        body: Box<[Stmt]>,
+        condition: RawExpr,
+        body: Box<[RawStmt]>,
     },
     While {
-        condition: Expr,
-        body: Box<[Stmt]>,
+        condition: RawExpr,
+        body: Box<[RawStmt]>,
     },
-    /// A function statement means writing the implementation of a function
-    /// For example:
-    /// ```no_run
-    /// 
-    /// fn main() {
-    ///     // implementation
-    /// }
-    /// ```
     Function {
         name: String,
-        parameters: Box<[FunctionParameter]>,
+        parameters: Box<[RawFunctionParameter]>,
         return_type: Type,
-        body: Box<[Stmt]>
+        body: Box<[RawStmt]>,
     },
-    Return(Option<Expr>),
-    Expression(Expr),
+    Return(Option<RawExpr>),
+    Expression(RawExpr),
 }
 
-#[derive(Debug,  Clone, PartialEq)]
-pub struct FunctionParameter {
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawFunctionParameter {
     pub name: String,
     pub data_type: Type,
 }
 
-impl std::fmt::Display for FunctionParameter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:", self.name)?;
-        writeln!(f, " {:#?}", self.data_type)
-    }
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawProgram {
+    pub ast: Box<[RawStmt]>,
 }

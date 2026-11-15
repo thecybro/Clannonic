@@ -1,12 +1,12 @@
 //! This is the language I am experimenting with, whose name is not yet
 //! decided but I am going with **clannonic** for now.
-//! 
+//!
 //! For now, it's just a test crate but later when it can run/evaluate basic code,
 //! I am planning to integrate it with my other project **Clanix** to make it the
 //! programatic/scripting layer for it allowing users to automate the tasks
 //! in **Clanix** instead of having to do all things manually.
-//! 
-//! You can find the information about **Clanix**; a developer tool at 
+//!
+//! You can find the information about **Clanix**; a developer tool at
 //! [Clanix](https://github.com/Clannon-Labs/Clanix)
 //!
 
@@ -17,9 +17,8 @@
 
 // use language::*;
 // use semantic::*;
-use frontends::*;
 use backends::*;
-
+use frontends::*;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -64,23 +63,13 @@ pub fn run(source: &str) -> Result<()> {
     let program = Parser::new(tokens).parse()?;
     // println!("{program:#?}");
 
-    let typed = TypeChecker::new().check_program(&program)?;
+    TypeChecker::new().check_program(&program)?;
 
-    // The interpreter/compiler receives the typed version of the program
-    // so it doesn't have to check the validity of the statements, perform
-    // type checks or mutability of the identfiers or do anything except
-    // what's actually important to run the program.
-    // 
-    // Also the types ast could be made more efficient so the interpreter
-    // can quickly execute the statements/expressions instead of going back
-    // and forth
-    let result = Interpreter::new().evaluate(&program);
-
-    println!("{result:#?}");
-
+    // The checker currently validates the RawProgram but does not yet return
+    // the validated frontends::Program. So we are not passing raw parser nodes to a
+    // backend; execution will be reconnected when the checker emits Program.
     Ok(())
 }
-
 
 #[test]
 fn test_end_to_end() {
@@ -88,11 +77,8 @@ fn test_end_to_end() {
         let x = 1
         return x
     }
-    
+
     let y = main()";
-    
-    assert_eq!(
-        run(&source),
-        Ok(())
-    )
+
+    assert_eq!(run(&source), Ok(()))
 }

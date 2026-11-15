@@ -9,12 +9,12 @@ use crate::language::{
     Type,
 };
 use super::{
-    Expr,
-    FunctionParameter,
+    RawExpr,
+    RawFunctionParameter,
     Keyword,
     LexedOutput,
-    Program,
-    Stmt,
+    RawProgram,
+    RawStmt,
     Token,
     TokenKind,
     BooleanVal,
@@ -60,7 +60,7 @@ impl<'a> Parser<'a> {
     /// leads to a recursive calling between itself, add operations parser,
     /// multiplication parser and primary parser which calls the add/multiplication
     /// parser or simply returns a number or identifier/variable by pattern matching
-    pub fn parse(&mut self) -> Result<Program> {
+    pub fn parse(&mut self) -> Result<RawProgram> {
         let mut ast = vec![];
 
         // Loop over the tokens and parse the statements until we reach
@@ -86,7 +86,7 @@ impl<'a> Parser<'a> {
         }
             
         Ok(
-            Program{
+            RawProgram{
                 ast: ast.into_boxed_slice()
             }
         )
@@ -109,7 +109,7 @@ impl<'a> Parser<'a> {
     ///     // do something
     /// }
     /// ```
-    fn parse_statement(&mut self) -> Result<Stmt> {   
+    fn parse_statement(&mut self) -> Result<RawStmt> {   
         match self.current()?.kind {
             TokenKind::Keyword(Keyword::Let) => self.parse_let_stmt(),
             TokenKind::Keyword(Keyword::If) => self.parse_if_stmt(),
@@ -135,7 +135,7 @@ impl<'a> Parser<'a> {
     }
     
     /// Parse the statement if it starts with let
-    fn parse_let_stmt(&mut self) -> Result<Stmt> {  
+    fn parse_let_stmt(&mut self) -> Result<RawStmt> {  
         self.expect_keyword(Keyword::Let)?;
 
         let mut mutable = false;
@@ -155,7 +155,7 @@ impl<'a> Parser<'a> {
 
         self.expect_semicolon()?;
         
-        Ok(Stmt::Let {
+        Ok(RawStmt::Let {
             identifier,
             mutable,
             annotation,
@@ -166,7 +166,7 @@ impl<'a> Parser<'a> {
 
     /// Parse the statement if it starts with an identifier
     /// which is likely to be an assignment statement
-    fn parse_assign_stmt(&mut self) -> Result<Stmt> {
+    fn parse_assign_stmt(&mut self) -> Result<RawStmt> {
         let identifier = self.expect_identifier()?; // Consume the identifier
 
         let operator = self.expect_assign_operator()?;
@@ -176,7 +176,7 @@ impl<'a> Parser<'a> {
         self.expect_semicolon()?;
         
         Ok(
-            Stmt::Assign {
+            RawStmt::Assign {
                 identifier,
                 operator,
                 expression
@@ -188,12 +188,12 @@ impl<'a> Parser<'a> {
     /// a code block, so they can be parsed in the same way
     
     /// Parse the section of the tokens that come under the if statement
-    fn parse_if_stmt(&mut self) -> Result<Stmt> {
+    fn parse_if_stmt(&mut self) -> Result<RawStmt> {
         self.parse_condition_stmt(Keyword::If)
     }
 
     /// Parse the section that the while loop should cover 
-    fn parse_while_stmt(&mut self) -> Result<Stmt> {
+    fn parse_while_stmt(&mut self) -> Result<RawStmt> {
         self.parse_condition_stmt(Keyword::While)
     }
 
@@ -211,7 +211,7 @@ impl<'a> Parser<'a> {
     /// 
     /// let x = add_one(1) 
     /// ```
-    fn parse_function_stmt(&mut self) -> Result<Stmt> {
+    fn parse_function_stmt(&mut self) -> Result<RawStmt> {
         self.expect_keyword(Keyword::Fn)?;
 
         let name = self.expect_identifier()?;
@@ -224,7 +224,7 @@ impl<'a> Parser<'a> {
 
             let data_type = parser.expect_type()?;
 
-            Ok(FunctionParameter {
+            Ok(RawFunctionParameter {
                 name,
                 data_type
             })
@@ -252,7 +252,7 @@ impl<'a> Parser<'a> {
         self.expect(TokenKind::RBrace)?;
         
         Ok(
-            Stmt::Function {
+            RawStmt::Function {
                 name,
                 parameters,
                 return_type,
@@ -261,7 +261,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_return_stmt(&mut self) -> Result<Stmt> {
+    fn parse_return_stmt(&mut self) -> Result<RawStmt> {
         self.expect_keyword(Keyword::Return)?;
         
         let value = self.parse_expression()?;
@@ -269,17 +269,17 @@ impl<'a> Parser<'a> {
         self.expect_semicolon()?;
         
         Ok(
-            Stmt::Return(Some(value))
+            RawStmt::Return(Some(value))
         )
     }
 
-    fn parse_expression_stmt(&mut self) -> Result<Stmt> {
+    fn parse_expression_stmt(&mut self) -> Result<RawStmt> {
         if self.at(TokenKind::Identifier) {
             let expr = self.parse_expression()?;
 
             self.expect_semicolon()?;
 
-            Ok(Stmt::Expression(expr))
+            Ok(RawStmt::Expression(expr))
         } else {
             return Err(ParseError::TokenExpected(
                 format!("Expected an identifier to form an expression statement!")
@@ -293,7 +293,7 @@ impl<'a> Parser<'a> {
     /// Start the parsing by calling the operation parser with least precedence;
     /// here, we called conditional cuz binary operations need to be done before
     /// conditional operations
-    fn parse_expression(&mut self) -> Result<Expr> {
+    fn parse_expression(&mut self) -> Result<RawExpr> {
         self.parse_comparison()
     }
 
@@ -303,7 +303,7 @@ impl<'a> Parser<'a> {
     /// If there are any binary operators, we would get binary tree,
     /// and if there are no binary operators, we would just get the identifiers or 
     /// numbers
-    fn parse_comparison(&mut self) -> Result<Expr> {
+    fn parse_comparison(&mut self) -> Result<RawExpr> {
         // get the expression to put at the left of the conditional operator 
         let mut left = self.parse_addition()?; 
 
@@ -331,7 +331,7 @@ impl<'a> Parser<'a> {
             // number or identifier or a binary)
             let right = self.parse_addition()?;
 
-            left = Expr::Comparison {
+            left = RawExpr::Comparison {
                 left: Box::new(left),
                 operator,
                 right: Box::new(right)
@@ -354,7 +354,7 @@ impl<'a> Parser<'a> {
     /// The reason we dont have to check if there are still tokens left after consuming the operator
     /// is that; the parse_multiplication() already does that internally
     ///
-    fn parse_addition(&mut self) -> Result<Expr> {
+    fn parse_addition(&mut self) -> Result<RawExpr> {
         let mut left = self.parse_multiplication()?;
         
         while let Ok(token) = self.current() {
@@ -367,7 +367,7 @@ impl<'a> Parser<'a> {
             self.advance()?;
             let right = self.parse_multiplication()?;
 
-            left = Expr::Arithmetic {
+            left = RawExpr::Arithmetic {
                 left: Box::new(left),
                 operator,
                 right: Box::new(right)
@@ -377,7 +377,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn parse_multiplication(&mut self) -> Result<Expr> {
+    fn parse_multiplication(&mut self) -> Result<RawExpr> {
         /*
          * Call parse_unary() to get the numbers/identifiers
          * or a binary (either containing numbers/identifiers or other binaries)
@@ -398,7 +398,7 @@ impl<'a> Parser<'a> {
             self.advance()?;
             let right = self.parse_primary()?;
 
-            left = Expr::Arithmetic{
+            left = RawExpr::Arithmetic{
                 left: Box::new(left),
                 operator,
                 right: Box::new(right)
@@ -407,12 +407,12 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn parse_unary(&mut self) -> Result<Expr> {
+    fn parse_unary(&mut self) -> Result<RawExpr> {
         if let Some(operator) = self.current_prefix_operator() {
             self.advance()?;
             
             let operand = self.parse_unary()?;
-            return Ok(Expr::Unary {
+            return Ok(RawExpr::Unary {
                 operator,
                 operand: Box::new(operand),
                 fixity: UnaryFixity::Prefix
@@ -422,7 +422,7 @@ impl<'a> Parser<'a> {
     }
 
 
-    fn parse_postfix(&mut self) -> Result<Expr> {
+    fn parse_postfix(&mut self) -> Result<RawExpr> {
         let mut operand = self.parse_primary()?;
 
         while let Some(current) = self.current_kind() {
@@ -434,7 +434,7 @@ impl<'a> Parser<'a> {
 
             self.advance()?;
 
-            operand = Expr::Unary {
+            operand = RawExpr::Unary {
                 operator,
                 operand: Box::new(operand),
                 fixity: UnaryFixity::Postfix
@@ -449,14 +449,14 @@ impl<'a> Parser<'a> {
      * numbers or identifiers or expressions by pattern matching
      * Others just indirectly call it and add respective operators; they dont do the underlying work
      */
-    fn parse_primary(&mut self) -> Result<Expr> {
+    fn parse_primary(&mut self) -> Result<RawExpr> {
         let token = self.current()?;
             
         match token.kind {
             TokenKind::IntegerLiteral => {
                 if let Some(integer) = parse_to_i64(token.lexeme) {
                     self.advance()?;
-                    Ok(Expr::Integer(integer))
+                    Ok(RawExpr::Integer(integer))
                 } else {
                     Err(ParseError::StringToI64)
                 }
@@ -464,36 +464,36 @@ impl<'a> Parser<'a> {
             TokenKind::FloatLiteral => {
                 if let Some(float) = parse_to_f64(token.lexeme) {
                     self.advance()?;
-                    Ok(Expr::Float(float))
+                    Ok(RawExpr::Float(float))
                 } else {
                     Err(ParseError::StringToF64)
                 }
             },
             TokenKind::StringLiteral => {
-                Ok(Expr::String(self.advance()?.lexeme.to_string()))
+                Ok(RawExpr::String(self.advance()?.lexeme.to_string()))
             },
             TokenKind::BooleanLiteral(boolean_val) => {
                 self.advance()?;
-                Ok(Expr::Boolean(boolean_val))
+                Ok(RawExpr::Boolean(boolean_val))
             },
             TokenKind::Identifier => {
                 let identifier = self.advance()?.lexeme.to_string();
 
                 if self.is_at_end() || self.current()?.kind != TokenKind::LParen {
-                    return Ok(Expr::Identifier(identifier));
+                    return Ok(RawExpr::Identifier(identifier));
                 }
                 
                 self.advance()?; // consume '('
 
                 let arguments = Vec::new();
                 if self.take_if(TokenKind::RParen) {
-                    return Ok(Expr::FunctionCall {
+                    return Ok(RawExpr::FunctionCall {
                         name: identifier,
                         arguments: arguments.into_boxed_slice()
                     });
                 }
                 
-                Ok(Expr::FunctionCall {
+                Ok(RawExpr::FunctionCall {
                     name: identifier,
                     arguments: self.parse_comma_separated(|parser| {
                         Ok(parser.parse_expression()?)
@@ -588,7 +588,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse any code block typically enclosed between {}}
-    fn parse_block(&mut self) -> Result<Box<[Stmt]>> {
+    fn parse_block(&mut self) -> Result<Box<[RawStmt]>> {
         // The block needs to start with a {
         self.expect(TokenKind::LBrace)?;
 
@@ -611,16 +611,16 @@ impl<'a> Parser<'a> {
         Ok(stmts.into_boxed_slice())
     }
 
-    fn parse_condition_stmt(&mut self, keyword: Keyword) -> Result<Stmt> {
+    fn parse_condition_stmt(&mut self, keyword: Keyword) -> Result<RawStmt> {
         self.expect_keyword(keyword)?;
 
         match keyword {
-            Keyword::If => Ok(Stmt::If { 
+            Keyword::If => Ok(RawStmt::If { 
                 condition: self.parse_expression()?,
                 body: self.parse_block()?
             }),
 
-            Keyword::While => Ok(Stmt::While { 
+            Keyword::While => Ok(RawStmt::While { 
                 condition: self.parse_expression()?,
                 body: self.parse_block()?
             }),
