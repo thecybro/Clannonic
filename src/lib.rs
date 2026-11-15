@@ -10,14 +10,14 @@
 //! [Clanix](https://github.com/Clannon-Labs/Clanix)
 //!
 
-mod frontend;
-mod backends;
-mod language;
-mod semantic;
+// mod frontends;
+// mod backends;
+// mod language;
+// mod semantic;
 
-use language::*;
-use semantic::*;
-use frontend::*;
+// use language::*;
+// use semantic::*;
+use frontends::*;
 use backends::*;
 
 
@@ -61,12 +61,20 @@ pub fn run(source: &str) -> Result<()> {
     let tokens = Lexer::new(&source).lex()?;
     // println!("{tokens:#?}");
 
-    let parsed = Parser::new(tokens).parse()?;
-    // println!("{parsed:#?}");
+    let program = Parser::new(tokens).parse()?;
+    // println!("{program:#?}");
 
-    let checked = TypeChecker::new().check_program(&parsed)?;
-    
-    let result = Interpreter::new().evaluate(&parsed);
+    let typed = TypeChecker::new().check_program(&program)?;
+
+    // The interpreter/compiler receives the typed version of the program
+    // so it doesn't have to check the validity of the statements, perform
+    // type checks or mutability of the identfiers or do anything except
+    // what's actually important to run the program.
+    // 
+    // Also the types ast could be made more efficient so the interpreter
+    // can quickly execute the statements/expressions instead of going back
+    // and forth
+    let result = Interpreter::new().evaluate(&program);
 
     println!("{result:#?}");
 

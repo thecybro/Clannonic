@@ -17,7 +17,8 @@ use crate::{
     }
 };
 
-use super::{Result, TypeError, TypeEnvironment, Binding};
+use super::error::{Result, TypeError};
+use super::environment::{TypeEnvironment, Binding};
 
 
 #[derive(Debug, Clone, PartialEq)]

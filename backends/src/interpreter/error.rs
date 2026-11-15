@@ -1,12 +1,12 @@
 
-use crate::language::{
+use frontends::{
     ArithmeticOp,
     ComparisonOp,
     UnaryOp,
     UnaryFixity,
     AssignOp,
 };
-use crate::frontend::{
+use frontends::{
     Stmt,
     Expr,
 };

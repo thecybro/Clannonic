@@ -1,9 +1,9 @@
 
 use std::collections::HashMap;
 
-use crate::{Type};
+use crate::Type;
 
-use super::{Result, TypeError};
+use super::error::{Result, TypeError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeEnvironment {

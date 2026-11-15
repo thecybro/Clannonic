@@ -5,7 +5,7 @@ use std::collections::{
 };
 use std::rc::Rc;
 
-use crate::language::{
+use frontends::{
     AssignOp, 
     ArithmeticOp, 
     ComparisonOp, 
@@ -13,7 +13,7 @@ use crate::language::{
     UnaryOp,
     Type, 
 };
-use crate::frontend::{
+use frontends::{
     Expr, 
     FunctionParameter, 
     Program, 
@@ -317,6 +317,7 @@ impl Interpreter {
                 self.eval_expression(expr)?;
                 Ok(Flow::Continue)
             },
+            _ => todo!()
         }
     }
 
@@ -509,7 +510,8 @@ impl Interpreter {
             },
             Expr::FunctionCall { name, arguments } => {
                 self.eval_function_call_expression(name, arguments)
-            }
+            },
+            _ => todo!()
         }
     }
 
@@ -709,7 +711,8 @@ impl Interpreter {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left <= right))
                         )
-                    }
+                    },
+                    _ => todo!()
                 }
             },
             (Value::Integer(left), Value::Float(right)) => {
@@ -743,7 +746,8 @@ impl Interpreter {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left as f64 <= right))
                         )
-                    }
+                    },
+                    _ => todo!()
                 }
             },
             (Value::Float(left), Value::Integer(right)) => {
@@ -777,7 +781,8 @@ impl Interpreter {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left <= right as f64))
                         )
-                    }
+                    },
+                    _ => todo!()
                 }
             },
             (Value::Float(left), Value::Float(right)) => {
@@ -811,7 +816,8 @@ impl Interpreter {
                         Ok(Value::Boolean
                             (bool_raw_to_type(left <= right))
                         )
-                    }
+                    },
+                    _ => todo!()
                 }
             },
 
@@ -858,7 +864,8 @@ impl Interpreter {
                                 bool_type_to_raw(left) <= 
                                 bool_type_to_raw(right)))
                         )
-                    }
+                    },
+                    _ => todo!()
                 } 
             }
             (left, right) => {
