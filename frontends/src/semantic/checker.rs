@@ -139,6 +139,19 @@ impl TypeChecker {
 }
 
 impl TypeChecker {
+    fn check_block(&mut self, body: &[RawStmt]) -> Result<Box<[TypedStmt]>> {
+        self.environment.enter_scope();
+
+        let result = body
+            .iter()
+            .map(|stmt| self.check_statement(stmt))
+            .collect::<Result<Vec<_>>>();
+
+        self.environment.exit_scope();
+
+        result.map(Vec::into_boxed_slice)
+    }
+    
     fn check_let_stmt(
         &mut self,
         identifier: &str,
@@ -194,16 +207,11 @@ impl TypeChecker {
             });
         }
 
-        // self.check_block(body)
-        let mut typed_statements = Vec::new();
-
-        for stmt in body.iter() {
-            typed_statements.push(self.check_statement(stmt)?)
-        }
-
+        let body = self.check_block(body)?;
+        
         Ok(TypedStmt::If {
             condition: typed_expr,
-            body: typed_statements.into_boxed_slice()
+            body
         })
     }
 
@@ -217,16 +225,11 @@ impl TypeChecker {
             });
         }
 
-        // self.check_block(body)
-        let mut typed_statements = Vec::new();
-
-        for stmt in body.iter() {
-            typed_statements.push(self.check_statement(stmt)?)
-        }
+        let body = self.check_block(body)?;
 
         Ok(TypedStmt::While {
             condition: typed_expr,
-            body: typed_statements.into_boxed_slice()
+            body
         })
     }
 
@@ -328,7 +331,7 @@ impl TypeChecker {
             }
 
             Ok(typed_statements.into_boxed_slice())
-        })()?;
+        })();
 
         self.curr_ret_type = prev_return_type;
         self.environment.exit_scope();
@@ -338,7 +341,7 @@ impl TypeChecker {
             name: name.to_string(),
             parameters: params.into_boxed_slice(),
             return_type,
-            body: typed_body
+            body: typed_body?
         })
     }
 
