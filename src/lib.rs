@@ -9,19 +9,21 @@
 //! You can find the information about **Clanix**; a developer tool at
 //! [Clanix](https://github.com/Clannon-Labs/Clanix)
 //!
-
-use backends::{
+mod tests;
+pub use backends::{
     EvalError,
     Interpreter,
 };
-use frontends::{
+pub use frontends::{
     LexError,
     ParseError,
     TypeError,
 
     Lexer,
     Parser,
+    Type,
     TypeChecker,
+    TypedProgram
 };
 
 

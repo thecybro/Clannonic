@@ -392,7 +392,7 @@ impl Interpreter {
     ///     // do something
     /// }
     ///
-    /// let x = main() // the actual execution occurs here in this call expression
+    /// let x = main(); // the actual execution occurs here in this call expression
     /// ```
     fn eval_function_stmt(
         &mut self,
