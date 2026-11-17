@@ -2,7 +2,7 @@ use std::collections::{HashMap, hash_map::Entry};
 use std::rc::Rc;
 
 use frontends::{ArithmeticOp, AssignOp, ComparisonOp, Type, UnaryFixity, UnaryOp};
-use frontends::{BooleanVal, Expr, FunctionParameter, Program, Stmt};
+use frontends::{BooleanVal, FunctionParameter, TypedExpr, TypedProgram, TypedStmt};
 
 use super::{EnvId, Environment, EvalError, Flow, Function, Interpreter, Result, Value};
 
@@ -27,7 +27,7 @@ impl Interpreter {
         interpreter
     }
 
-    pub fn evaluate(&mut self, program: &Program) -> Result<()> {
+    pub fn evaluate(&mut self, program: &TypedProgram) -> Result<()> {
         // First register all the functions
         // Here, since the current id is the same as globals,
         // the call to define_current() will get you global id
@@ -39,7 +39,7 @@ impl Interpreter {
         for stmt in program.ast.iter() {
             // Evaluate the statement only if it is not a function
             // because we have already registered all functions
-            if !matches!(stmt, Stmt::Function { .. }) {
+            if !matches!(stmt, TypedStmt::Function { .. }) {
                 let _ = self.eval_stmt(&stmt)?;
             }
         }
@@ -232,11 +232,11 @@ impl Interpreter {
 }
 
 impl Interpreter {
-    fn eval_stmt(&mut self, stmt: &Stmt) -> Result<Flow> {
+    fn eval_stmt(&mut self, stmt: &TypedStmt) -> Result<Flow> {
         match stmt {
             // Let statement declares an identifier and throws an error if it already
             // exists in the current environment
-            Stmt::Let {
+            TypedStmt::Let {
                 identifier,
                 mutable: _,
                 ty: _,
@@ -247,7 +247,7 @@ impl Interpreter {
             }
             // Assign statement replaces the identifier's value stored on the available
             // environment, but throws an error if it doesn't exist
-            Stmt::Assign {
+            TypedStmt::Assign {
                 identifier,
                 operator,
                 expression,
@@ -256,9 +256,9 @@ impl Interpreter {
                 self.eval_assign_stmt(identifier, *operator, expression)?;
                 Ok(Flow::Continue)
             }
-            Stmt::If { condition, body } => self.eval_if_stmt(condition, body),
-            Stmt::While { condition, body } => self.eval_while_stmt(condition, body),
-            Stmt::Function {
+            TypedStmt::If { condition, body } => self.eval_if_stmt(condition, body),
+            TypedStmt::While { condition, body } => self.eval_while_stmt(condition, body),
+            TypedStmt::Function {
                 name,
                 parameters,
                 return_type,
@@ -270,11 +270,11 @@ impl Interpreter {
                 self.eval_function_stmt(name, parameters, *return_type, body)?;
                 Ok(Flow::Continue)
             }
-            Stmt::Return(expression) => {
+            TypedStmt::Return(expression) => {
                 let value = self.eval_return_stmt(expression)?;
                 Ok(Flow::Return(value))
             }
-            Stmt::Expression(expr) => {
+            TypedStmt::Expression(expr) => {
                 self.eval_expression(expr)?;
                 Ok(Flow::Continue)
             }
@@ -282,9 +282,9 @@ impl Interpreter {
         }
     }
 
-    fn eval_function_signatures(&mut self, stmt: &Stmt) -> Result<Flow> {
+    fn eval_function_signatures(&mut self, stmt: &TypedStmt) -> Result<Flow> {
         match stmt {
-            Stmt::Function {
+            TypedStmt::Function {
                 name,
                 parameters,
                 return_type,
@@ -298,7 +298,7 @@ impl Interpreter {
         Ok(Flow::Continue)
     }
 
-    fn eval_block(&mut self, body: &[Stmt]) -> Result<Flow> {
+    fn eval_block(&mut self, body: &[TypedStmt]) -> Result<Flow> {
         for stmt in body {
             match self.eval_stmt(stmt)? {
                 Flow::Continue => {}
@@ -311,13 +311,13 @@ impl Interpreter {
         Ok(Flow::Continue)
     }
 
-    fn eval_let_stmt(&mut self, identifier: String, expression: &Expr) -> Result<Value> {
+    fn eval_let_stmt(&mut self, identifier: String, expression: &TypedExpr) -> Result<Value> {
         let value = self.eval_expression(expression)?;
 
         self.define_current(identifier, value)
     }
 
-    fn eval_return_stmt(&mut self, expression: &Option<Expr>) -> Result<Value> {
+    fn eval_return_stmt(&mut self, expression: &Option<TypedExpr>) -> Result<Value> {
         if let Some(expr) = expression {
             return self.eval_expression(expr);
         } else {
@@ -332,13 +332,13 @@ impl Interpreter {
         &mut self,
         identifier: &str,
         operator: AssignOp,
-        expression: &Expr,
+        expression: &TypedExpr,
     ) -> Result<Value> {
         let value = match operator {
             AssignOp::Assign => self.eval_expression(expression)?,
 
             AssignOp::AddAssign | AssignOp::SubtractAssign => {
-                let left = Expr::Identifier(identifier.to_string());
+                let left = TypedExpr::Identifier(identifier.to_string());
 
                 let arithmetic_operator = match operator {
                     AssignOp::AddAssign => ArithmeticOp::Add,
@@ -354,7 +354,7 @@ impl Interpreter {
         self.assign_current(identifier, value)
     }
 
-    fn eval_if_stmt(&mut self, condition: &Expr, body: &Box<[Stmt]>) -> Result<Flow> {
+    fn eval_if_stmt(&mut self, condition: &TypedExpr, body: &Box<[TypedStmt]>) -> Result<Flow> {
         if self.eval_expression(condition)? == Value::Boolean(BooleanVal::True) {
             self.eval_block(body)
         } else {
@@ -362,7 +362,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_while_stmt(&mut self, condition: &Expr, body: &Box<[Stmt]>) -> Result<Flow> {
+    fn eval_while_stmt(&mut self, condition: &TypedExpr, body: &Box<[TypedStmt]>) -> Result<Flow> {
         while self.eval_expression(condition)? == Value::Boolean(BooleanVal::True) {
             match self.eval_block(body)? {
                 Flow::Continue => {}
@@ -392,7 +392,7 @@ impl Interpreter {
         name: &str,
         parameters: &Box<[FunctionParameter]>,
         return_type: Type,
-        body: &Box<[Stmt]>,
+        body: &Box<[TypedStmt]>,
     ) -> Result<Value> {
         // These .clones() can be too expensive too quickly, so we gotta
         // replace it soon
@@ -413,32 +413,32 @@ impl Interpreter {
         Ok(Value::Unit)
     }
 
-    fn eval_expression(&mut self, expression: &Expr) -> Result<Value> {
+    fn eval_expression(&mut self, expression: &TypedExpr) -> Result<Value> {
         match expression {
-            Expr::Integer(value) => Ok(Value::Integer(*value)),
-            Expr::Float(value) => Ok(Value::Float(*value)),
-            Expr::String(value) => Ok(Value::String(value.clone())),
-            Expr::Identifier(name) => {
+            TypedExpr::Integer(value) => Ok(Value::Integer(*value)),
+            TypedExpr::Float(value) => Ok(Value::Float(*value)),
+            TypedExpr::String(value) => Ok(Value::String(value.clone())),
+            TypedExpr::Identifier(name) => {
                 // println!("From interpreter/impl.rs line 325\n");
                 Ok(self.get_current(name)?.clone())
             }
-            Expr::Boolean(boolean_type) => self.eval_boolean_expression(boolean_type),
-            Expr::Arithmetic {
+            TypedExpr::Boolean(boolean_type) => self.eval_boolean_expression(boolean_type),
+            TypedExpr::Arithmetic {
                 left,
                 operator,
                 right,
             } => self.eval_arithmetic_expression(left, operator, right),
-            Expr::Comparison {
+            TypedExpr::Comparison {
                 left,
                 operator,
                 right,
             } => self.eval_comparison_expression(left, operator, right),
-            Expr::Unary {
+            TypedExpr::Unary {
                 operator,
                 operand,
                 fixity,
             } => self.eval_unary_expression(operator, operand, *fixity),
-            Expr::FunctionCall { name, arguments } => {
+            TypedExpr::FunctionCall { name, arguments } => {
                 self.eval_function_call_expression(name, arguments)
             }
             _ => todo!(),
@@ -451,7 +451,7 @@ impl Interpreter {
     fn eval_function_call_expression(
         &mut self,
         name: &str,
-        arguments: &Box<[Expr]>,
+        arguments: &Box<[TypedExpr]>,
     ) -> Result<Value> {
         // We would have the entire function body stored in value
         // println!("From interpreter/impl.rs: line 457\n");
@@ -518,9 +518,9 @@ impl Interpreter {
 
     fn eval_arithmetic_expression(
         &mut self,
-        left: &Expr,
+        left: &TypedExpr,
         operator: &ArithmeticOp,
-        right: &Expr,
+        right: &TypedExpr,
     ) -> Result<Value> {
         let left = self.eval_expression(left)?;
         let right = self.eval_expression(right)?;
@@ -559,7 +559,7 @@ impl Interpreter {
     fn eval_unary_expression(
         &mut self,
         operator: &UnaryOp,
-        operand: &Box<Expr>,
+        operand: &Box<TypedExpr>,
         fixity: UnaryFixity,
     ) -> Result<Value> {
         let operand_val = self.eval_expression(operand)?;
@@ -605,9 +605,9 @@ impl Interpreter {
 
     fn eval_comparison_expression(
         &mut self,
-        left: &Expr,
+        left: &TypedExpr,
         operator: &ComparisonOp,
-        right: &Expr,
+        right: &TypedExpr,
     ) -> Result<Value> {
         let left = self.eval_expression(left)?;
         let right = self.eval_expression(right)?;
@@ -744,10 +744,10 @@ fn ok_evaluate_binary_expression_with_identifier() {
     // Define the variable "x" with 5.0
     let _ = interpreter.define_current("x".to_string(), Value::Integer(5));
 
-    let expression = Expr::Arithmetic {
-        left: Box::new(Expr::Identifier("x".to_string())),
+    let expression = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Identifier("x".to_string())),
         operator: ArithmeticOp::Add,
-        right: Box::new(Expr::Integer(10)),
+        right: Box::new(TypedExpr::Integer(10)),
     };
 
     assert_eq!(
@@ -765,10 +765,10 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
     // Define the variable "x" with "a_string"
     let _ = interpreter.define_current("x".to_string(), Value::String("a_string".to_string()));
 
-    let expression = Expr::Arithmetic {
-        left: Box::new(Expr::Identifier("x".to_string())),
+    let expression = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Identifier("x".to_string())),
         operator: ArithmeticOp::Add,
-        right: Box::new(Expr::Integer(10)),
+        right: Box::new(TypedExpr::Integer(10)),
     };
 
     assert_eq!(
@@ -780,10 +780,10 @@ fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
         })
     );
 
-    let expression2 = Expr::Arithmetic {
-        left: Box::new(Expr::Identifier("y".to_string())),
+    let expression2 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Identifier("y".to_string())),
         operator: ArithmeticOp::Add,
-        right: Box::new(Expr::Float(10.0)),
+        right: Box::new(TypedExpr::Float(10.0)),
     };
 
     assert_eq!(
@@ -797,10 +797,10 @@ fn ok_evaluate_normal_binary_expression() {
     let mut interpreter = Interpreter::new();
 
     // 10 + 20 = 30
-    let expression1 = Expr::Arithmetic {
-        left: Box::new(Expr::Integer(10)),
+    let expression1 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Integer(10)),
         operator: ArithmeticOp::Add,
-        right: Box::new(Expr::Integer(20)),
+        right: Box::new(TypedExpr::Integer(20)),
     };
 
     assert_eq!(
@@ -809,10 +809,10 @@ fn ok_evaluate_normal_binary_expression() {
     );
 
     // 20.0 - 10.0 = 10.0
-    let expression2 = Expr::Arithmetic {
-        left: Box::new(Expr::Float(20.0)),
+    let expression2 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Float(20.0)),
         operator: ArithmeticOp::Subtract,
-        right: Box::new(Expr::Float(10.0)),
+        right: Box::new(TypedExpr::Float(10.0)),
     };
 
     assert_eq!(
@@ -821,10 +821,10 @@ fn ok_evaluate_normal_binary_expression() {
     );
 
     // 20 * 10 = 200
-    let expression3 = Expr::Arithmetic {
-        left: Box::new(Expr::Integer(20)),
+    let expression3 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Integer(20)),
         operator: ArithmeticOp::Multiply,
-        right: Box::new(Expr::Integer(10)),
+        right: Box::new(TypedExpr::Integer(10)),
     };
 
     assert_eq!(
@@ -833,10 +833,10 @@ fn ok_evaluate_normal_binary_expression() {
     );
 
     // 20.0 / 10.0 = 2.0
-    let expression4 = Expr::Arithmetic {
-        left: Box::new(Expr::Float(20.0)),
+    let expression4 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Float(20.0)),
         operator: ArithmeticOp::Divide,
-        right: Box::new(Expr::Float(10.0)),
+        right: Box::new(TypedExpr::Float(10.0)),
     };
 
     assert_eq!(
@@ -849,10 +849,10 @@ fn ok_evaluate_normal_binary_expression() {
 fn err_evaluate_divide_by_zero() {
     let mut interpreter = Interpreter::new();
 
-    let expression1 = Expr::Arithmetic {
-        left: Box::new(Expr::Float(10.0)),
+    let expression1 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ArithmeticOp::Divide,
-        right: Box::new(Expr::Float(0.0)),
+        right: Box::new(TypedExpr::Float(0.0)),
     };
 
     assert_eq!(
@@ -870,10 +870,10 @@ fn err_evaluate_binary_expression_with_string() {
     let mut interpreter = Interpreter::new();
 
     // "something" + 20.0 = Err()
-    let expression1 = Expr::Arithmetic {
-        left: Box::new(Expr::String("something".to_string())),
+    let expression1 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::String("something".to_string())),
         operator: ArithmeticOp::Add,
-        right: Box::new(Expr::Integer(20)),
+        right: Box::new(TypedExpr::Integer(20)),
     };
 
     assert_eq!(
@@ -886,10 +886,10 @@ fn err_evaluate_binary_expression_with_string() {
     );
 
     // "something" - 20.0 = Err()
-    let expression2 = Expr::Arithmetic {
-        left: Box::new(Expr::String("something".to_string())),
+    let expression2 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::String("something".to_string())),
         operator: ArithmeticOp::Subtract,
-        right: Box::new(Expr::Float(20.0)),
+        right: Box::new(TypedExpr::Float(20.0)),
     };
 
     assert_eq!(
@@ -902,10 +902,10 @@ fn err_evaluate_binary_expression_with_string() {
     );
 
     // "something" * 20.0 = Err()
-    let expression3 = Expr::Arithmetic {
-        left: Box::new(Expr::String("something".to_string())),
+    let expression3 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::String("something".to_string())),
         operator: ArithmeticOp::Multiply,
-        right: Box::new(Expr::Integer(20)),
+        right: Box::new(TypedExpr::Integer(20)),
     };
 
     assert_eq!(
@@ -918,10 +918,10 @@ fn err_evaluate_binary_expression_with_string() {
     );
 
     // "something" / 20.0 = Err()
-    let expression4 = Expr::Arithmetic {
-        left: Box::new(Expr::String("something".to_string())),
+    let expression4 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::String("something".to_string())),
         operator: ArithmeticOp::Divide,
-        right: Box::new(Expr::Float(20.0)),
+        right: Box::new(TypedExpr::Float(20.0)),
     };
 
     assert_eq!(
@@ -938,13 +938,13 @@ fn err_evaluate_binary_expression_with_string() {
 fn ok_evaluate_normal_nested_binary_expression() {
     let mut interpreter = Interpreter::new();
 
-    let expression = Expr::Arithmetic {
-        left: Box::new(Expr::Integer(10)),
+    let expression = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Integer(10)),
         operator: ArithmeticOp::Add,
-        right: Box::new(Expr::Arithmetic {
-            left: Box::new(Expr::Integer(20)),
+        right: Box::new(TypedExpr::Arithmetic {
+            left: Box::new(TypedExpr::Integer(20)),
             operator: ArithmeticOp::Multiply,
-            right: Box::new(Expr::Float(2.0)),
+            right: Box::new(TypedExpr::Float(2.0)),
         }),
     };
 
@@ -958,13 +958,13 @@ fn ok_evaluate_normal_nested_binary_expression() {
 fn err_evaluate_invalid_binary_expression() {
     let mut interpreter = Interpreter::new();
 
-    let expression = Expr::Arithmetic {
-        left: Box::new(Expr::Float(10.0)),
+    let expression = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ArithmeticOp::Add,
-        right: Box::new(Expr::Arithmetic {
-            left: Box::new(Expr::Float(20.0)),
+        right: Box::new(TypedExpr::Arithmetic {
+            left: Box::new(TypedExpr::Float(20.0)),
             operator: ArithmeticOp::Multiply,
-            right: Box::new(Expr::String("invalid".to_string())),
+            right: Box::new(TypedExpr::String("invalid".to_string())),
         }),
     };
 
@@ -983,10 +983,10 @@ fn ok_evaluate_conditional_expression() {
     let mut interpreter = Interpreter::new();
 
     // 10.0 == 10.0: true
-    let expression1 = Expr::Conditional {
-        left: Box::new(Expr::Float(10.0)),
+    let expression1 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ComparisonOp::IsEqualTo,
-        right: Box::new(Expr::Float(10.0)),
+        right: Box::new(TypedExpr::Float(10.0)),
     };
 
     assert_eq!(
@@ -995,10 +995,10 @@ fn ok_evaluate_conditional_expression() {
     );
 
     // 10.0 > 10.0: false
-    let expression2 = Expr::Conditional {
-        left: Box::new(Expr::Float(10.0)),
+    let expression2 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ComparisonOp::IsGreaterThan,
-        right: Box::new(Expr::Float(10.0)),
+        right: Box::new(TypedExpr::Float(10.0)),
     };
 
     assert_eq!(
@@ -1007,10 +1007,10 @@ fn ok_evaluate_conditional_expression() {
     );
 
     // 10.0 < 10.0: false
-    let expression3 = Expr::Conditional {
-        left: Box::new(Expr::Float(10.0)),
+    let expression3 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ComparisonOp::IsLessThan,
-        right: Box::new(Expr::Float(10.0)),
+        right: Box::new(TypedExpr::Float(10.0)),
     };
 
     assert_eq!(
@@ -1019,10 +1019,10 @@ fn ok_evaluate_conditional_expression() {
     );
 
     // 10.0 != 10.0: false
-    let expression4 = Expr::Conditional {
-        left: Box::new(Expr::Float(10.0)),
+    let expression4 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ComparisonOp::IsNotEqualTo,
-        right: Box::new(Expr::Float(10.0)),
+        right: Box::new(TypedExpr::Float(10.0)),
     };
 
     assert_eq!(
@@ -1031,10 +1031,10 @@ fn ok_evaluate_conditional_expression() {
     );
 
     // 10.0 >= 10.0: true
-    let expression5 = Expr::Conditional {
-        left: Box::new(Expr::Float(10.0)),
+    let expression5 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ComparisonOp::IsGreaterOrEqualTo,
-        right: Box::new(Expr::Float(10.0)),
+        right: Box::new(TypedExpr::Float(10.0)),
     };
 
     assert_eq!(
@@ -1043,10 +1043,10 @@ fn ok_evaluate_conditional_expression() {
     );
 
     // 10.0 <= 10.0: true
-    let expression6 = Expr::Conditional {
-        left: Box::new(Expr::Float(10.0)),
+    let expression6 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ComparisonOp::IsLessOrEqualTo,
-        right: Box::new(Expr::Float(10.0)),
+        right: Box::new(TypedExpr::Float(10.0)),
     };
 
     assert_eq!(
@@ -1060,13 +1060,13 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     let mut interpreter = Interpreter::new();
 
     // 10.0 == (5.0 + 5.0): true
-    let expression1 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10)),
+    let expression1 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Integer(10)),
         operator: ComparisonOp::IsEqualTo,
-        right: Box::new(Expr::Arithmetic {
-            left: Box::new(Expr::Integer(5)),
+        right: Box::new(TypedExpr::Arithmetic {
+            left: Box::new(TypedExpr::Integer(5)),
             operator: ArithmeticOp::Add,
-            right: Box::new(Expr::Float(5.0)),
+            right: Box::new(TypedExpr::Float(5.0)),
         }),
     };
 
@@ -1076,13 +1076,13 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     );
 
     // 10.0 < (5.0 + 5.0): true
-    let expression2 = Expr::Conditional {
-        left: Box::new(Expr::Float(10.0)),
+    let expression2 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ComparisonOp::IsLessThan,
-        right: Box::new(Expr::Arithmetic {
-            left: Box::new(Expr::Float(5.0)),
+        right: Box::new(TypedExpr::Arithmetic {
+            left: Box::new(TypedExpr::Float(5.0)),
             operator: ArithmeticOp::Add,
-            right: Box::new(Expr::Integer(5)),
+            right: Box::new(TypedExpr::Integer(5)),
         }),
     };
 
@@ -1092,16 +1092,16 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     );
 
     // 10.0 > (5.0 + (15.0 - 5.0)): false
-    let expression3 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10)),
+    let expression3 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Integer(10)),
         operator: ComparisonOp::IsGreaterThan,
-        right: Box::new(Expr::Arithmetic {
-            left: Box::new(Expr::Integer(5)),
+        right: Box::new(TypedExpr::Arithmetic {
+            left: Box::new(TypedExpr::Integer(5)),
             operator: ArithmeticOp::Add,
-            right: Box::new(Expr::Arithmetic {
-                left: Box::new(Expr::Float(15.0)),
+            right: Box::new(TypedExpr::Arithmetic {
+                left: Box::new(TypedExpr::Float(15.0)),
                 operator: ArithmeticOp::Subtract,
-                right: Box::new(Expr::Float(5.0)),
+                right: Box::new(TypedExpr::Float(5.0)),
             }),
         }),
     };
@@ -1112,16 +1112,16 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     );
 
     // 10.0 != (5.0 + (15.0 - 5.0)): true
-    let expression4 = Expr::Conditional {
-        left: Box::new(Expr::Integer(10)),
+    let expression4 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Integer(10)),
         operator: ComparisonOp::IsNotEqualTo,
-        right: Box::new(Expr::Arithmetic {
-            left: Box::new(Expr::Integer(5)),
+        right: Box::new(TypedExpr::Arithmetic {
+            left: Box::new(TypedExpr::Integer(5)),
             operator: ArithmeticOp::Add,
-            right: Box::new(Expr::Arithmetic {
-                left: Box::new(Expr::Float(15.0)),
+            right: Box::new(TypedExpr::Arithmetic {
+                left: Box::new(TypedExpr::Float(15.0)),
                 operator: ArithmeticOp::Subtract,
-                right: Box::new(Expr::Float(5.0)),
+                right: Box::new(TypedExpr::Float(5.0)),
             }),
         }),
     };
@@ -1132,16 +1132,16 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     );
 
     // 10.0 >= (5.0 + (15.0 - 5.0)): false
-    let expression5 = Expr::Conditional {
-        left: Box::new(Expr::Float(10.0)),
+    let expression5 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ComparisonOp::IsGreaterOrEqualTo,
-        right: Box::new(Expr::Arithmetic {
-            left: Box::new(Expr::Float(5.0)),
+        right: Box::new(TypedExpr::Arithmetic {
+            left: Box::new(TypedExpr::Float(5.0)),
             operator: ArithmeticOp::Add,
-            right: Box::new(Expr::Arithmetic {
-                left: Box::new(Expr::Integer(15)),
+            right: Box::new(TypedExpr::Arithmetic {
+                left: Box::new(TypedExpr::Integer(15)),
                 operator: ArithmeticOp::Subtract,
-                right: Box::new(Expr::Integer(5)),
+                right: Box::new(TypedExpr::Integer(5)),
             }),
         }),
     };
@@ -1152,16 +1152,16 @@ fn ok_evaluate_nested_binary_conditional_expression() {
     );
 
     // 10.0 <= (5.0 + (15.0 - 5.0)): true
-    let expression6 = Expr::Conditional {
-        left: Box::new(Expr::Float(10.0)),
+    let expression6 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ComparisonOp::IsLessOrEqualTo,
-        right: Box::new(Expr::Arithmetic {
-            left: Box::new(Expr::Float(5.0)),
+        right: Box::new(TypedExpr::Arithmetic {
+            left: Box::new(TypedExpr::Float(5.0)),
             operator: ArithmeticOp::Add,
-            right: Box::new(Expr::Arithmetic {
-                left: Box::new(Expr::Integer(15)),
+            right: Box::new(TypedExpr::Arithmetic {
+                left: Box::new(TypedExpr::Integer(15)),
                 operator: ArithmeticOp::Subtract,
-                right: Box::new(Expr::Integer(5)),
+                right: Box::new(TypedExpr::Integer(5)),
             }),
         }),
     };
@@ -1180,10 +1180,10 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
     let _ = interpreter.define_current("y".to_string(), Value::Integer(5));
 
     // x(10.0) == y(5.0): false
-    let expression1 = Expr::Conditional {
-        left: Box::new(Expr::Identifier("x".to_string())),
+    let expression1 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Identifier("x".to_string())),
         operator: ComparisonOp::IsEqualTo,
-        right: Box::new(Expr::Identifier("y".to_string())),
+        right: Box::new(TypedExpr::Identifier("y".to_string())),
     };
 
     assert_eq!(
@@ -1192,10 +1192,10 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
     );
 
     // x(10.0) > y(5.0): true
-    let expression2 = Expr::Conditional {
-        left: Box::new(Expr::Identifier("x".to_string())),
+    let expression2 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Identifier("x".to_string())),
         operator: ComparisonOp::IsGreaterThan,
-        right: Box::new(Expr::Identifier("y".to_string())),
+        right: Box::new(TypedExpr::Identifier("y".to_string())),
     };
 
     assert_eq!(
@@ -1204,10 +1204,10 @@ fn ok_evaluate_conditional_expression_with_identifiers() {
     );
 
     // x(10.0) < y(5.0): false
-    let expression3 = Expr::Conditional {
-        left: Box::new(Expr::Identifier("x".to_string())),
+    let expression3 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Identifier("x".to_string())),
         operator: ComparisonOp::IsLessThan,
-        right: Box::new(Expr::Identifier("y".to_string())),
+        right: Box::new(TypedExpr::Identifier("y".to_string())),
     };
 
     assert_eq!(
@@ -1221,10 +1221,10 @@ fn err_evaluate_conditional_expression() {
     let mut interpreter = Interpreter::new();
 
     // "x" == 10.0: Err()
-    let expression1 = Expr::Conditional {
-        left: Box::new(Expr::String("x".to_string())),
+    let expression1 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::String("x".to_string())),
         operator: ComparisonOp::IsEqualTo,
-        right: Box::new(Expr::Float(10.0)),
+        right: Box::new(TypedExpr::Float(10.0)),
     };
 
     assert_eq!(
@@ -1237,10 +1237,10 @@ fn err_evaluate_conditional_expression() {
     );
 
     // 10.0 == "x": Err()
-    let expression1 = Expr::Conditional {
-        left: Box::new(Expr::Float(10.0)),
+    let expression1 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Float(10.0)),
         operator: ComparisonOp::IsEqualTo,
-        right: Box::new(Expr::String("x".to_string())),
+        right: Box::new(TypedExpr::String("x".to_string())),
     };
 
     assert_eq!(
@@ -1253,10 +1253,10 @@ fn err_evaluate_conditional_expression() {
     );
 
     // "x" == "x": Err()
-    let expression1 = Expr::Conditional {
-        left: Box::new(Expr::String("x".to_string())),
+    let expression1 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::String("x".to_string())),
         operator: ComparisonOp::IsEqualTo,
-        right: Box::new(Expr::String("x".to_string())),
+        right: Box::new(TypedExpr::String("x".to_string())),
     };
 
     assert_eq!(
@@ -1274,42 +1274,46 @@ fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and
     let mut interpreter = Interpreter::new();
 
     // let x = 10.0 + (10.0 + 10.0): x = 30
-    let define_stmt = Stmt::Let {
+    let define_stmt = TypedStmt::Let {
         identifier: "x".to_string(),
-        expression: Expr::Arithmetic {
-            left: Box::new(Expr::Integer(10)),
+        mutable: false,
+        ty: Type::Int,
+        expression: TypedExpr::Arithmetic {
+            left: Box::new(TypedExpr::Integer(10)),
             operator: ArithmeticOp::Add,
-            right: Box::new(Expr::Arithmetic {
-                left: Box::new(Expr::Float(10.0)),
+            right: Box::new(TypedExpr::Arithmetic {
+                left: Box::new(TypedExpr::Float(10.0)),
                 operator: ArithmeticOp::Add,
-                right: Box::new(Expr::Float(10.0)),
+                right: Box::new(TypedExpr::Float(10.0)),
             }),
         },
     };
 
-    assert_eq!(interpreter.eval_stmt(&define_stmt), Ok(()));
+    assert_eq!(interpreter.eval_stmt(&define_stmt), Ok(Flow::Continue));
 
     // let y = 10.0 + (x + 10.0): y = 50
-    let access_stmt = Stmt::Let {
+    let access_stmt = TypedStmt::Let {
         identifier: "y".to_string(),
-        expression: Expr::Arithmetic {
-            left: Box::new(Expr::Integer(10)),
+        mutable: false,
+        ty: Type::Int,
+        expression: TypedExpr::Arithmetic {
+            left: Box::new(TypedExpr::Integer(10)),
             operator: ArithmeticOp::Add,
-            right: Box::new(Expr::Arithmetic {
-                left: Box::new(Expr::Identifier("x".to_string())),
+            right: Box::new(TypedExpr::Arithmetic {
+                left: Box::new(TypedExpr::Identifier("x".to_string())),
                 operator: ArithmeticOp::Add,
-                right: Box::new(Expr::Float(10.0)),
+                right: Box::new(TypedExpr::Float(10.0)),
             }),
         },
     };
 
-    assert_eq!(interpreter.eval_stmt(&access_stmt), Ok(()));
+    assert_eq!(interpreter.eval_stmt(&access_stmt), Ok(Flow::Continue));
 
     // x(30) + y(50): 80.0
-    let expression1 = Expr::Arithmetic {
-        left: Box::new(Expr::Identifier("x".to_string())),
+    let expression1 = TypedExpr::Arithmetic {
+        left: Box::new(TypedExpr::Identifier("x".to_string())),
         operator: ArithmeticOp::Add,
-        right: Box::new(Expr::Identifier("y".to_string())),
+        right: Box::new(TypedExpr::Identifier("y".to_string())),
     };
 
     assert_eq!(
@@ -1318,10 +1322,10 @@ fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and
     );
 
     // x(30) < y(50): true
-    let expression2 = Expr::Conditional {
-        left: Box::new(Expr::Identifier("x".to_string())),
+    let expression2 = TypedExpr::Comparison {
+        left: Box::new(TypedExpr::Identifier("x".to_string())),
         operator: ComparisonOp::IsLessThan,
-        right: Box::new(Expr::Identifier("y".to_string())),
+        right: Box::new(TypedExpr::Identifier("y".to_string())),
     };
 
     assert_eq!(
@@ -1344,11 +1348,11 @@ fn ok_and_err_environment_define_and_get() {
         Ok(Value::String("something".to_string()))
     );
 
-    assert_eq!(interpreter.get_current("x"), Ok(Value::Float(10.0)));
+    assert_eq!(interpreter.get_current("x"), Ok(&Value::Float(10.0)));
 
     assert_eq!(
         interpreter.get_current("y"),
-        Ok(Value::String("something".to_string()))
+        Ok(&Value::String("something".to_string()))
     );
 
     assert_eq!(

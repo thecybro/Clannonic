@@ -1,5 +1,5 @@
 
-use crate::RawExpr;
+use crate::{RawExpr, UnaryFixity};
 
 use crate::{ArithmeticOp, Type, language::{ComparisonOp, UnaryOp}};
 
@@ -38,7 +38,8 @@ pub enum TypeError {
     
     InvalidUnaryOperation {
         operator: UnaryOp,
-        found: Type
+        found: Type,
+        fixity: UnaryFixity
     },
 
     ConditionMustBeBoolean {

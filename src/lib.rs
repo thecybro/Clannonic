@@ -10,14 +10,7 @@
 //! [Clanix](https://github.com/Clannon-Labs/Clanix)
 //!
 
-// mod frontends;
-// mod backends;
-// mod language;
-// mod semantic;
-
-// use language::*;
-// use semantic::*;
-use backends::*;
+// use backends::*;
 use frontends::*;
 
 #[derive(Debug, PartialEq)]
@@ -25,7 +18,7 @@ pub enum Error {
     LexError(LexError),
     ParseError(ParseError),
     TypeError(TypeError),
-    EvaluateError(EvalError),
+    // EvaluateError(EvalError),
 }
 
 impl From<ParseError> for Error {
@@ -34,11 +27,11 @@ impl From<ParseError> for Error {
     }
 }
 
-impl From<EvalError> for Error {
-    fn from(err: EvalError) -> Self {
-        Error::EvaluateError(err)
-    }
-}
+// impl From<EvalError> for Error {
+    // fn from(err: EvalError) -> Self {
+        // Error::EvaluateError(err)
+    // }
+// }
 
 impl From<LexError> for Error {
     fn from(err: LexError) -> Self {
@@ -61,10 +54,12 @@ pub fn run(source: &str) -> Result<()> {
     // println!("{tokens:#?}");
 
     let program = Parser::new(tokens).parse()?;
-    // println!("{program:#?}");
+    println!("{program:#?}");
 
-    TypeChecker::new().check_program(&program)?;
+    let typed_program = TypeChecker::new().check_program(&program)?;
 
+    println!("{typed_program:#?}");
+    
     // The checker currently validates the RawProgram but does not yet return
     // the validated frontends::Program. So we are not passing raw parser nodes to a
     // backend; execution will be reconnected when the checker emits Program.
@@ -73,12 +68,22 @@ pub fn run(source: &str) -> Result<()> {
 
 #[test]
 fn test_end_to_end() {
-    let source = "fn main() -> int {
-        let x = 1
-        return x
+    let source = "// This code must be valid before we add more features
+    // Including this comment here
+    
+    let mut resu = add(10, 20);
+    
+    fn add(x: int, y: int) -> int {
+        return x + y;
     }
-
-    let y = main()";
+    
+    let mut result: int = add(2, 3);
+    result += 4;
+    
+    if result > 5 {
+        result = result - 1;
+    }
+";
 
     assert_eq!(run(&source), Ok(()))
 }

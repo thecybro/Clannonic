@@ -7,72 +7,76 @@ use super::super::parser::BooleanVal;
 /// Unlike the parser's Raw* nodes, these nodes are produced only after
 /// semantic analysis has accepted the program.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Program {
-    pub ast: Box<[Stmt]>,
+pub struct TypedProgram {
+    pub ast: Box<[TypedStmt]>,
 }
 
 /// Alias for callers that prefer the name Ast for the validated tree.
-pub type Ast = Program;
+// pub type Ast = TypedProgram;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypedExpr {
+    pub kind: TypedExprKind,
+    pub ty: Type,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum Expr {
+pub enum TypedExprKind {
     Integer(i64),
-    Float(f64),
-    String(String),
     Identifier(String),
     Boolean(BooleanVal),
     Comparison {
-        left: Box<Expr>,
+        left: Box<TypedExpr>,
         operator: ComparisonOp,
-        right: Box<Expr>,
+        right: Box<TypedExpr>,
     },
     Arithmetic {
-        left: Box<Expr>,
+        left: Box<TypedExpr>,
         operator: ArithmeticOp,
-        right: Box<Expr>,
+        right: Box<TypedExpr>,
     },
     Unary {
         operator: UnaryOp,
-        operand: Box<Expr>,
+        operand: Box<TypedExpr>,
         fixity: UnaryFixity,
     },
     FunctionCall {
         name: String,
-        arguments: Box<[Expr]>,
+        arguments: Box<[TypedExpr]>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub enum Stmt {
+pub enum TypedStmt {
     Let {
         identifier: String,
         mutable: bool,
         ty: Type,
-        expression: Expr,
+        expression: TypedExpr,
     },
     Assign {
         identifier: String,
         operator: AssignOp,
-        expression: Expr,
+        expression: TypedExpr,
     },
     If {
-        condition: Expr,
-        body: Box<[Stmt]>,
+        condition: TypedExpr,
+        body: Box<[TypedStmt]>,
     },
     While {
-        condition: Expr,
-        body: Box<[Stmt]>,
+        condition: TypedExpr,
+        body: Box<[TypedStmt]>,
     },
     Function {
         name: String,
         parameters: Box<[FunctionParameter]>,
         return_type: Type,
-        body: Box<[Stmt]>,
+        body: Box<[TypedStmt]>,
     },
-    Return(Option<Expr>),
-    Expression(Expr),
+    Return(Option<TypedExpr>),
+    Expression(TypedExpr),
 }
 
 #[derive(Debug, Clone, PartialEq)]

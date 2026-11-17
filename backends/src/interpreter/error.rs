@@ -7,8 +7,8 @@ use frontends::{
     AssignOp,
 };
 use frontends::{
-    Stmt,
-    Expr,
+    TypedStmt,
+    TypedExpr,
 };
 use super::Value;
 
@@ -21,7 +21,7 @@ pub enum EvalError {
     FailedToStoreValue(String),
     InvalidReturnType(Value),
     DuplicateFunctionDeclaration(String),
-    UnsupportedStatement(Stmt),
+    UnsupportedStatement(TypedStmt),
     ExpressionNotCallable {
         error: String,
         value: Value,
@@ -38,13 +38,13 @@ pub enum EvalError {
     },
     InvalidUnaryOperation {
         operator: UnaryOp,
-        operand: Box<Expr>,
+        operand: Box<TypedExpr>,
         fixity: UnaryFixity
     },
     InvalidAssignOperation {
         identifier: String,
         operator: AssignOp,
         stored_val: Value,
-        expression: Expr
+        expression: TypedExpr
     }
 }

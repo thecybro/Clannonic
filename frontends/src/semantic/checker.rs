@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::{FunctionParameter, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
 use crate::parser::{RawExpr, RawFunctionParameter, RawProgram, RawStmt};
 use crate::{
     Type,
@@ -31,21 +32,24 @@ impl TypeChecker {
         }
     }
 
-    pub fn check_program(&mut self, program: &RawProgram) -> Result<()> {
+    pub fn check_program(&mut self, program: &RawProgram) -> Result<TypedProgram> {
         for stmt in program.ast.iter() {
             // println!("Collecting function signatures");
             self.collect_function_signature(stmt)?;
         }
 
+        let mut ast = Vec::new();
         for stmt in program.ast.iter() {
             // println!("Checking statements");
-            self.check_statement(stmt)?;
+            ast.push(self.check_statement(stmt)?);
         }
 
-        Ok(())
+        Ok(TypedProgram {
+            ast: ast.into_boxed_slice()
+        })
     }
 
-    fn check_statement(&mut self, statement: &RawStmt) -> Result<()> {
+    fn check_statement(&mut self, statement: &RawStmt) -> Result<TypedStmt> {
         match statement {
             RawStmt::Let {
                 identifier,
@@ -71,26 +75,38 @@ impl TypeChecker {
                 body,
             } => self.check_function_body(name, parameters, *return_type, body),
 
-            RawStmt::Return(expression) => self.check_return_stmt(expression),
+            RawStmt::Return(expression) => self.check_return_stmt(expression.as_ref()),
 
             RawStmt::Expression(expression) => {
-                self.check_expression(expression)?;
-                Ok(())
+                let typed_expr = self.check_expression(expression)?;
+                Ok(TypedStmt::Expression(typed_expr))
             }
         }
     }
 
-    fn check_expression(&mut self, expression: &RawExpr) -> Result<Type> {
+    fn check_expression(&mut self, expression: &RawExpr) -> Result<TypedExpr> {
         match expression {
-            RawExpr::Integer(_) => Ok(Type::Int),
+            RawExpr::Integer(value) => Ok(TypedExpr {
+                kind: TypedExprKind::Integer(*value),
+                ty: Type::Int,
+            }),
 
-            RawExpr::Boolean(_) => Ok(Type::Bool),
+            RawExpr::Boolean(bool_literal) => Ok(TypedExpr {
+                kind: TypedExprKind::Boolean(*bool_literal),
+                ty: Type::Bool,
+            }),
+            
+            RawExpr::Identifier(name) => {
+                let binding = self
+                    .environment
+                    .lookup(name)
+                    .ok_or_else(|| TypeError::UndefinedVariable(name.clone()))?;
 
-            RawExpr::Identifier(name) => self
-                .environment
-                .lookup(name)
-                .map(|binding| binding.ty)
-                .ok_or_else(|| TypeError::UndefinedVariable(name.clone())),
+                Ok(TypedExpr {
+                    kind: TypedExprKind::Identifier(name.clone()),
+                    ty: binding.ty
+                })
+            }
 
             RawExpr::FunctionCall { name, arguments } => {
                 self.check_function_call_expression(name, arguments)
@@ -123,40 +139,28 @@ impl TypeChecker {
 }
 
 impl TypeChecker {
-    fn check_block(&mut self, body: &[RawStmt]) -> Result<()> {
-        self.environment.enter_scope();
-
-        let result = body
-            .iter()
-            .try_for_each(|statement| self.check_statement(statement));
-
-        self.environment.exit_scope();
-
-        result
-    }
-
     fn check_let_stmt(
         &mut self,
         identifier: &str,
         mutable: bool,
         annotation: Option<Type>,
         expression: &RawExpr,
-    ) -> Result<()> {
+    ) -> Result<TypedStmt> {
         // println!("Got following details: ");
         // println!("Ident: {identifier}\nMutable: {mutable}\nAnnotation: {annotation:#?}\nExpression: {expression:#?}");
 
-        let inferred_type = self.check_expression(expression)?;
+        let typed_expr = self.check_expression(expression)?;
 
         let variable_type = if let Some(annotation) = annotation {
-            if annotation != inferred_type {
+            if annotation != typed_expr.ty {
                 return Err(TypeError::TypeMismatch {
                     expected: annotation,
-                    found: inferred_type,
+                    found: typed_expr.ty,
                 });
             }
             annotation
         } else {
-            inferred_type
+            typed_expr.ty
         };
 
         // println!("\nInferred following:\n");
@@ -170,33 +174,60 @@ impl TypeChecker {
             },
         )?;
 
-        Ok(())
+        Ok(
+            TypedStmt::Let{
+                identifier: identifier.to_string(),
+                mutable,
+                ty: variable_type,
+                expression: typed_expr
+            }
+        )
     }
 
-    fn check_if_stmt(&mut self, expression: &RawExpr, body: &Box<[RawStmt]>) -> Result<()> {
-        let inferred_type = self.check_expression(expression)?;
+    fn check_if_stmt(&mut self, expression: &RawExpr, body: &[RawStmt]) -> Result<TypedStmt> {
+        let typed_expr = self.check_expression(expression)?;
 
-        if inferred_type != Type::Bool {
+        if typed_expr.ty != Type::Bool {
             return Err(TypeError::TypeMismatch {
                 expected: Type::Bool,
-                found: inferred_type,
+                found: typed_expr.ty,
             });
         }
 
-        self.check_block(body)
+        // self.check_block(body)
+        let mut typed_statements = Vec::new();
+
+        for stmt in body.iter() {
+            typed_statements.push(self.check_statement(stmt)?)
+        }
+
+        Ok(TypedStmt::If {
+            condition: typed_expr,
+            body: typed_statements.into_boxed_slice()
+        })
     }
 
-    fn check_while_stmt(&mut self, condition: &RawExpr, body: &[RawStmt]) -> Result<()> {
-        let inferred_type = self.check_expression(condition)?;
+    fn check_while_stmt(&mut self, condition: &RawExpr, body: &[RawStmt]) -> Result<TypedStmt> {
+        let typed_expr = self.check_expression(condition)?;
 
-        if inferred_type != Type::Bool {
+        if typed_expr.ty != Type::Bool {
             return Err(TypeError::TypeMismatch {
                 expected: Type::Bool,
-                found: inferred_type,
+                found: typed_expr.ty,
             });
         }
 
-        self.check_block(body)
+        // self.check_block(body)
+        let mut typed_statements = Vec::new();
+
+        for stmt in body.iter() {
+            typed_statements.push(self.check_statement(stmt)?)
+        }
+
+        Ok(TypedStmt::While {
+            condition: typed_expr,
+            body: typed_statements.into_boxed_slice()
+        })
     }
 
     fn check_assign_stmt(
@@ -204,7 +235,7 @@ impl TypeChecker {
         identifier: &str,
         operator: AssignOp,
         expression: &RawExpr,
-    ) -> Result<()> {
+    ) -> Result<TypedStmt> {
         let stored_ident = match self.environment.lookup(identifier) {
             Some(name) => name,
             None => return Err(TypeError::UndefinedVariable(identifier.to_string())),
@@ -215,12 +246,18 @@ impl TypeChecker {
         }
 
         let ident_type = stored_ident.ty;
-        let right_type = self.check_expression(expression)?;
+        let right_typed_expr = self.check_expression(expression)?;
 
+        let right_type = right_typed_expr.ty;
+        
         // The operator owns the rule, so we just ask it for return type
         // if the types are valid for assignment operation
         if operator.validates(ident_type, right_type) {
-            Ok(())
+            Ok(TypedStmt::Assign {
+                identifier: identifier.to_string(),
+                operator,
+                expression: right_typed_expr
+            })
         } else {
             Err(TypeError::TypeMismatch {
                 expected: ident_type,
@@ -231,11 +268,11 @@ impl TypeChecker {
 
     fn check_function_body(
         &mut self,
-        _name: &str,
+        name: &str,
         parameters: &[RawFunctionParameter],
         return_type: Type,
         body: &[RawStmt],
-    ) -> Result<()> {
+    ) -> Result<TypedStmt> {
         // println!("Checking function body now");
         self.environment.enter_scope();
 
@@ -248,15 +285,21 @@ impl TypeChecker {
         // Which wasn't the case when we were doing the param binding and stmt checking
         // inside the main function scope, which could result in an unexited scope,
         // affecting other methods relying on the scopes
-        let result = (|| {
+        let mut params = Vec::new();
+        let typed_body = (|| {
             for parameter in parameters {
+                let param = FunctionParameter {
+                    name: parameter.name.clone(),
+                    ty: parameter.data_type
+                };
                 self.environment.define(
-                    parameter.name.clone(),
+                    param.name.clone(),
                     Binding {
-                        ty: parameter.data_type,
+                        ty: param.ty,
                         mutable: false,
                     },
                 )?;
+                params.push(param)
             }
 
             // We look at whether any return type is declared to be returned by the function
@@ -268,12 +311,13 @@ impl TypeChecker {
 
             let mut saw_return = false;
 
+            let mut typed_statements = Vec::new();
             for statement in body {
                 if matches!(statement, RawStmt::Return(_)) {
                     saw_return = true;
                 }
 
-                self.check_statement(statement)?;
+                typed_statements.push(self.check_statement(statement)?);
             }
 
             if requires_return && !saw_return {
@@ -283,38 +327,50 @@ impl TypeChecker {
                 });
             }
 
-            Ok(())
-        })();
+            Ok(typed_statements.into_boxed_slice())
+        })()?;
 
         self.curr_ret_type = prev_return_type;
         self.environment.exit_scope();
 
-        result
+        // result
+        Ok(TypedStmt::Function {
+            name: name.to_string(),
+            parameters: params.into_boxed_slice(),
+            return_type,
+            body: typed_body
+        })
     }
 
-    fn check_return_stmt(&mut self, expression: &Option<RawExpr>) -> Result<()> {
+    fn check_return_stmt(&mut self, expression: Option<&RawExpr>) -> Result<TypedStmt> {
         let expected = self.curr_ret_type.ok_or(TypeError::ReturnOutsideFunction)?;
 
-        let found = match expression {
+        let (typed_expr, _type) = match expression {
             Some(expr) => {
                 // println!("Trying to check the expression we got in return statement");
-                self.check_expression(expr)?
+                let found = self.check_expression(expr)?;
+
+                // This found.clone() might not be needed if we improved the logic
+                // a bit
+                (Some(found.clone()), found.ty)
             }
-            None => Type::Unit,
+            None => {
+                (None, Type::Unit)
+            }
         };
 
-        if expected != found {
-            return Err(TypeError::InvalidReturnType { expected, found });
+        if expected != _type {
+            return Err(TypeError::InvalidReturnType { expected, found: _type });
         }
 
-        Ok(())
+        Ok(TypedStmt::Return(typed_expr))
     }
 
     fn check_function_call_expression(
         &mut self,
         name: &str,
         arguments: &[RawExpr],
-    ) -> Result<Type> {
+    ) -> Result<TypedExpr> {
         let function = self
             .lookup_function(name)
             .ok_or_else(|| TypeError::UndefinedFunction(name.to_string()))?
@@ -327,21 +383,32 @@ impl TypeChecker {
             });
         }
 
+        let mut typed_arguments = Vec::with_capacity(arguments.len());
+        
         for (index, (argument, expected_type)) in
             arguments.iter().zip(function.parameters.iter()).enumerate()
         {
-            let found_type = self.check_expression(argument)?;
+            let typed_argument = self.check_expression(argument)?;
 
-            if found_type != *expected_type {
+            if typed_argument.ty != *expected_type {
                 return Err(TypeError::InvalidArgumentType {
                     parameter: index,
                     expected: *expected_type,
-                    found: found_type,
+                    found: typed_argument.ty,
                 });
             }
+
+            typed_arguments.push(typed_argument);
         }
 
-        Ok(function.return_type)
+        // Ok(function.return_type)
+        Ok(TypedExpr {
+            kind: TypedExprKind::FunctionCall {
+                name: name.to_string(),
+                arguments: typed_arguments.into_boxed_slice(),
+            },
+            ty: function.return_type,
+        })
     }
 
     fn check_arithmetic_expression(
@@ -349,19 +416,34 @@ impl TypeChecker {
         left: &RawExpr,
         operator: ArithmeticOp,
         right: &RawExpr,
-    ) -> Result<Type> {
-        let left_type = self.check_expression(left)?;
-        let right_type = self.check_expression(right)?;
+    ) -> Result<TypedExpr> {
+        let typed_left = self.check_expression(left)?;
+        let typed_right = self.check_expression(right)?;
 
         // The operator owns the rule, so we just call it to know whether or not these
         // types form valid arithmetic operation
-        operator
-            .result_type(left_type, right_type)
-            .ok_or(TypeError::InvalidArithmeticOperation {
-                left: left_type,
+        
+        let left_ty = typed_left.ty;
+        let right_ty = typed_right.ty;
+
+        let result_type = operator
+            .result_type(left_ty, right_ty)
+            .ok_or(
+                TypeError::InvalidArithmeticOperation {
+                    left: left_ty,
+                    operator,
+                    right: right_ty
+                }
+            )?;
+
+        Ok(TypedExpr {
+            kind: TypedExprKind::Arithmetic {
+                left: Box::new(typed_left),
                 operator,
-                right: right_type,
-            })
+                right: Box::new(typed_right)
+            },
+            ty: result_type
+        })
     }
 
     fn check_comparison_expression(
@@ -369,17 +451,32 @@ impl TypeChecker {
         left: &RawExpr,
         operator: ComparisonOp,
         right: &RawExpr,
-    ) -> Result<Type> {
-        let left_type = self.check_expression(left)?;
-        let right_type = self.check_expression(right)?;
+    ) -> Result<TypedExpr> {
+        
+        let typed_left = self.check_expression(left)?;
+        let typed_right = self.check_expression(right)?;
 
-        operator
-            .return_type(left_type, right_type)
-            .ok_or(TypeError::InvalidComparisonOperation {
-                left: left_type,
-                operator: operator,
-                right: right_type,
-            })
+        let left_ty = typed_left.ty;
+        let right_ty = typed_right.ty;
+
+        let result_type = operator
+            .return_type(left_ty, right_ty)
+            .ok_or(
+                TypeError::InvalidComparisonOperation {
+                    left: left_ty,
+                    operator,
+                    right: right_ty
+                }
+            )?;
+        
+        Ok(TypedExpr {
+            kind: TypedExprKind::Comparison {
+                left: Box::new(typed_left),
+                operator,
+                right: Box::new(typed_right)
+            },
+            ty: result_type
+        })
     }
 
     fn check_unary_expression(
@@ -387,15 +484,30 @@ impl TypeChecker {
         operator: UnaryOp,
         operand: &RawExpr,
         fixity: UnaryFixity,
-    ) -> Result<Type> {
-        let operand_type = self.check_expression(operand)?;
+    ) -> Result<TypedExpr> {
+        let typed_operand = self.check_expression(operand)?;
 
-        operator
-            .return_type(operand_type, fixity)
-            .ok_or(TypeError::InvalidUnaryOperation {
+        let operand_ty = typed_operand.ty;
+        
+        let result_type = operator
+            .return_type(operand_ty, fixity)
+            .ok_or(
+                TypeError::InvalidUnaryOperation {
+                    operator,
+                    found: operand_ty,
+                    fixity,
+                }
+            )?;
+
+        Ok(TypedExpr {
+            kind: TypedExprKind::Unary {
                 operator,
-                found: operand_type,
-            })
+                operand: Box::new(typed_operand),
+                fixity
+            },
+            ty: result_type
+        })
+        
     }
 }
 

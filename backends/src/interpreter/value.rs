@@ -5,8 +5,8 @@ use frontends::Type;
 use frontends::{
     BooleanVal,
     FunctionParameter,
-    // Expr,
-    Stmt,
+    // TypedExpr,
+    TypedStmt,
 };
 
 use super::EnvId;
@@ -35,7 +35,7 @@ pub struct Function {
     pub(super) name: String,
     pub(super) parameters: Box<[FunctionParameter]>,
     pub(super) return_type: Type,
-    pub(super) body: Box<[Stmt]>,
+    pub(super) body: Box<[TypedStmt]>,
 
     pub(super) closure: EnvId,
 }
