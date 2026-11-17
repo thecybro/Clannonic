@@ -11,7 +11,17 @@
 //!
 
 // use backends::*;
-use frontends::*;
+use frontends::{
+    LexError,
+    ParseError,
+    TypeError,
+
+    Lexer,
+    Parser,
+    TypeChecker,
+};
+
+// use crate::Error::TypeError;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -60,14 +70,14 @@ pub fn run(source: &str) -> Result<()> {
 
     println!("{typed_program:#?}");
     
-    // The checker currently validates the RawProgram but does not yet return
+    // The checker currently validates the RawProgram and also returns
     // the validated frontends::Program. So we are not passing raw parser nodes to a
     // backend; execution will be reconnected when the checker emits Program.
     Ok(())
 }
 
 #[test]
-fn test_end_to_end() {
+fn test_multiple_features_at_once() {
     let source = "// This code must be valid before we add more features
     // Including this comment here
     
@@ -86,4 +96,12 @@ fn test_end_to_end() {
 ";
 
     assert_eq!(run(&source), Ok(()))
+}
+
+#[test]
+fn test_immutable_assignment_on_unary_expression() {
+    let source = "let x = 1;
+    x++;";
+
+    assert_eq!(run(&source), Err(Error::TypeError(TypeError::ImmutableAssignment("x".to_string()))))
 }
