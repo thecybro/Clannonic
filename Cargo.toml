@@ -11,5 +11,5 @@ edition = "2024"
 doctest = false
 
 [dependencies]
-# backends = { path = "backends" }
+backends = { path = "backends" }
 frontends = { path = "frontends" }

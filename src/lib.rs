@@ -10,7 +10,10 @@
 //! [Clanix](https://github.com/Clannon-Labs/Clanix)
 //!
 
-// use backends::*;
+use backends::{
+    EvalError,
+    Interpreter,
+};
 use frontends::{
     LexError,
     ParseError,
@@ -21,14 +24,13 @@ use frontends::{
     TypeChecker,
 };
 
-// use crate::Error::TypeError;
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
     LexError(LexError),
     ParseError(ParseError),
     TypeError(TypeError),
-    // EvaluateError(EvalError),
+    EvalError(EvalError),
 }
 
 impl From<ParseError> for Error {
@@ -37,11 +39,11 @@ impl From<ParseError> for Error {
     }
 }
 
-// impl From<EvalError> for Error {
-    // fn from(err: EvalError) -> Self {
-        // Error::EvaluateError(err)
-    // }
-// }
+impl From<EvalError> for Error {
+    fn from(err: EvalError) -> Self {
+        Error::EvalError(err)
+    }
+}
 
 impl From<LexError> for Error {
     fn from(err: LexError) -> Self {
@@ -64,15 +66,17 @@ pub fn run(source: &str) -> Result<()> {
     // println!("{tokens:#?}");
 
     let program = Parser::new(tokens).parse()?;
-    println!("{program:#?}");
+    // println!("{program:#?}");
 
     let typed_program = TypeChecker::new().check_program(&program)?;
 
-    println!("{typed_program:#?}");
+    // println!("{typed_program:#?}");
     
     // The checker currently validates the RawProgram and also returns
     // the validated frontends::Program. So we are not passing raw parser nodes to a
     // backend; execution will be reconnected when the checker emits Program.
+
+    Interpreter::new().evaluate(&typed_program)?;
     Ok(())
 }
 

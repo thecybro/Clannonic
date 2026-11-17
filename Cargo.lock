@@ -13,6 +13,7 @@ dependencies = [
 name = "clannonic"
 version = "0.1.0"
 dependencies = [
+ "backends",
  "frontends",
 ]
 

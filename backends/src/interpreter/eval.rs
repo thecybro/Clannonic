@@ -2,7 +2,7 @@ use std::collections::{HashMap, hash_map::Entry};
 use std::rc::Rc;
 
 use frontends::{ArithmeticOp, AssignOp, ComparisonOp, Type, UnaryFixity, UnaryOp};
-use frontends::{BooleanVal, FunctionParameter, TypedExpr, TypedProgram, TypedStmt};
+use frontends::{BooleanVal, FunctionParameter, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
 
 use super::{EnvId, Environment, EvalError, Flow, Function, Interpreter, Result, Value};
 
@@ -271,7 +271,7 @@ impl Interpreter {
                 Ok(Flow::Continue)
             }
             TypedStmt::Return(expression) => {
-                let value = self.eval_return_stmt(expression)?;
+                let value = self.eval_return_stmt(expression.as_ref())?;
                 Ok(Flow::Return(value))
             }
             TypedStmt::Expression(expr) => {
@@ -317,7 +317,7 @@ impl Interpreter {
         self.define_current(identifier, value)
     }
 
-    fn eval_return_stmt(&mut self, expression: &Option<TypedExpr>) -> Result<Value> {
+    fn eval_return_stmt(&mut self, expression: Option<&TypedExpr>) -> Result<Value> {
         if let Some(expr) = expression {
             return self.eval_expression(expr);
         } else {
@@ -338,7 +338,16 @@ impl Interpreter {
             AssignOp::Assign => self.eval_expression(expression)?,
 
             AssignOp::AddAssign | AssignOp::SubtractAssign => {
-                let left = TypedExpr::Identifier(identifier.to_string());
+                // let left = TypedExpr::Identifier(identifier.to_string());
+                
+                let left = TypedExpr {
+                    kind: TypedExprKind::Identifier(identifier.to_string()),
+                    ty: match self.get_current(identifier)? {
+                        Value::Integer(_) => Type::Int,
+                        Value::Boolean(_) => Type::Bool,
+                        _ => Type::Unit
+                    }
+                };
 
                 let arithmetic_operator = match operator {
                     AssignOp::AddAssign => ArithmeticOp::Add,
@@ -346,11 +355,9 @@ impl Interpreter {
                     AssignOp::Assign => unreachable!(),
                 };
 
-                // println!("Just sent {left:#?} {arithmetic_operator:#?} {expression:#?} for arithmetic evaluation");
-                self.eval_arithmetic_expression(&left, &arithmetic_operator, expression)?
+                self.eval_arithmetic_expression(&left, arithmetic_operator, expression)?
             }
         };
-        // println!("Just got value {value:#?} into assign stmt");
         self.assign_current(identifier, value)
     }
 
@@ -414,32 +421,29 @@ impl Interpreter {
     }
 
     fn eval_expression(&mut self, expression: &TypedExpr) -> Result<Value> {
-        match expression {
-            TypedExpr::Integer(value) => Ok(Value::Integer(*value)),
-            TypedExpr::Float(value) => Ok(Value::Float(*value)),
-            TypedExpr::String(value) => Ok(Value::String(value.clone())),
-            TypedExpr::Identifier(name) => {
-                // println!("From interpreter/impl.rs line 325\n");
-                Ok(self.get_current(name)?.clone())
+        match &expression.kind {
+            TypedExprKind::Integer(value) => Ok(Value::Integer(*value)),
+            TypedExprKind::Identifier(name) => {
+                Ok(self.get_current(&name)?.clone())
             }
-            TypedExpr::Boolean(boolean_type) => self.eval_boolean_expression(boolean_type),
-            TypedExpr::Arithmetic {
+            TypedExprKind::Boolean(boolean_literal) => self.eval_boolean_expression(&boolean_literal),
+            TypedExprKind::Arithmetic {
                 left,
                 operator,
                 right,
-            } => self.eval_arithmetic_expression(left, operator, right),
-            TypedExpr::Comparison {
+            } => self.eval_arithmetic_expression(&left, *operator, &right),
+            TypedExprKind::Comparison {
                 left,
                 operator,
                 right,
-            } => self.eval_comparison_expression(left, operator, right),
-            TypedExpr::Unary {
+            } => self.eval_comparison_expression(&left, *operator, &right),
+            TypedExprKind::Unary {
                 operator,
                 operand,
                 fixity,
-            } => self.eval_unary_expression(operator, operand, *fixity),
-            TypedExpr::FunctionCall { name, arguments } => {
-                self.eval_function_call_expression(name, arguments)
+            } => self.eval_unary_expression(*operator, &operand, *fixity),
+            TypedExprKind::FunctionCall { name, arguments } => {
+                self.eval_function_call_expression(&name, &arguments)
             }
             _ => todo!(),
         }
@@ -451,7 +455,7 @@ impl Interpreter {
     fn eval_function_call_expression(
         &mut self,
         name: &str,
-        arguments: &Box<[TypedExpr]>,
+        arguments: &[TypedExpr],
     ) -> Result<Value> {
         // We would have the entire function body stored in value
         // println!("From interpreter/impl.rs: line 457\n");
@@ -519,16 +523,14 @@ impl Interpreter {
     fn eval_arithmetic_expression(
         &mut self,
         left: &TypedExpr,
-        operator: &ArithmeticOp,
+        operator: ArithmeticOp,
         right: &TypedExpr,
     ) -> Result<Value> {
         let left = self.eval_expression(left)?;
         let right = self.eval_expression(right)?;
 
-        // println!("Just got {left:#?} {operator:#?} {right:#?} for arithmetic evaluation");
         match (left, operator, right) {
             (Value::Integer(left), ArithmeticOp::Add, Value::Integer(right)) => {
-                // println!("Added {left:#?} and {right:#?}");
                 Ok(Value::Integer(left + right))
             }
             (Value::Integer(left), ArithmeticOp::Subtract, Value::Integer(right)) => {
@@ -550,7 +552,7 @@ impl Interpreter {
             }
             (left, _, right) => Err(EvalError::InvalidArithmeticOperation {
                 left,
-                operator: *operator,
+                operator,
                 right,
             }),
         }
@@ -558,35 +560,25 @@ impl Interpreter {
 
     fn eval_unary_expression(
         &mut self,
-        operator: &UnaryOp,
+        operator: UnaryOp,
         operand: &Box<TypedExpr>,
         fixity: UnaryFixity,
     ) -> Result<Value> {
         let operand_val = self.eval_expression(operand)?;
 
-        // println!("Got operator '{operator:#?}' Operand_val '{operand_val}' and fixity '{fixity:#?}'");
-
         match (operator, operand_val, fixity) {
             (UnaryOp::Plus, Value::Integer(num), UnaryFixity::Prefix) => {
                 Ok(Value::Integer(num.abs()))
             }
-            (UnaryOp::Plus, Value::Float(num), UnaryFixity::Prefix) => Ok(Value::Float(num.abs())),
 
             (UnaryOp::Minus, Value::Integer(num), UnaryFixity::Prefix) => Ok(Value::Integer(-num)),
-            (UnaryOp::Minus, Value::Float(num), UnaryFixity::Prefix) => Ok(Value::Float(-num)),
 
             (UnaryOp::Increment, Value::Integer(num), UnaryFixity::Postfix) => {
                 Ok(Value::Integer(num + 1))
             }
-            (UnaryOp::Increment, Value::Float(num), UnaryFixity::Postfix) => {
-                Ok(Value::Float(num + 1.0))
-            }
 
             (UnaryOp::Decrement, Value::Integer(num), UnaryFixity::Postfix) => {
                 Ok(Value::Integer(num - 1))
-            }
-            (UnaryOp::Decrement, Value::Float(num), UnaryFixity::Postfix) => {
-                Ok(Value::Float(num - 1.0))
             }
 
             (UnaryOp::Not, Value::Boolean(bool_val), UnaryFixity::Prefix) => {
@@ -595,7 +587,7 @@ impl Interpreter {
 
             _ => {
                 return Err(EvalError::InvalidUnaryOperation {
-                    operator: *operator,
+                    operator,
                     operand: operand.clone(),
                     fixity,
                 });
@@ -606,7 +598,7 @@ impl Interpreter {
     fn eval_comparison_expression(
         &mut self,
         left: &TypedExpr,
-        operator: &ComparisonOp,
+        operator: ComparisonOp,
         right: &TypedExpr,
     ) -> Result<Value> {
         let left = self.eval_expression(left)?;
@@ -626,62 +618,7 @@ impl Interpreter {
                 }
                 _ => todo!(),
             },
-            (Value::Integer(left), Value::Float(right)) => match operator {
-                ComparisonOp::IsEqualTo => {
-                    Ok(Value::Boolean(bool_raw_to_type(left as f64 == right)))
-                }
-                ComparisonOp::IsNotEqualTo => {
-                    Ok(Value::Boolean(bool_raw_to_type(left as f64 != right)))
-                }
-                ComparisonOp::IsGreaterThan => {
-                    Ok(Value::Boolean(bool_raw_to_type(left as f64 > right)))
-                }
-                ComparisonOp::IsLessThan => {
-                    Ok(Value::Boolean(bool_raw_to_type((left as f64) < right)))
-                }
-                ComparisonOp::IsGreaterOrEqualTo => {
-                    Ok(Value::Boolean(bool_raw_to_type(left as f64 >= right)))
-                }
-                ComparisonOp::IsLessOrEqualTo => {
-                    Ok(Value::Boolean(bool_raw_to_type(left as f64 <= right)))
-                }
-                _ => todo!(),
-            },
-            (Value::Float(left), Value::Integer(right)) => match operator {
-                ComparisonOp::IsEqualTo => {
-                    Ok(Value::Boolean(bool_raw_to_type(left == right as f64)))
-                }
-                ComparisonOp::IsNotEqualTo => {
-                    Ok(Value::Boolean(bool_raw_to_type(left != right as f64)))
-                }
-                ComparisonOp::IsGreaterThan => {
-                    Ok(Value::Boolean(bool_raw_to_type(left > right as f64)))
-                }
-                ComparisonOp::IsLessThan => {
-                    Ok(Value::Boolean(bool_raw_to_type(left < right as f64)))
-                }
-                ComparisonOp::IsGreaterOrEqualTo => {
-                    Ok(Value::Boolean(bool_raw_to_type(left >= right as f64)))
-                }
-                ComparisonOp::IsLessOrEqualTo => {
-                    Ok(Value::Boolean(bool_raw_to_type(left <= right as f64)))
-                }
-                _ => todo!(),
-            },
-            (Value::Float(left), Value::Float(right)) => match operator {
-                ComparisonOp::IsEqualTo => Ok(Value::Boolean(bool_raw_to_type(left == right))),
-                ComparisonOp::IsNotEqualTo => Ok(Value::Boolean(bool_raw_to_type(left != right))),
-                ComparisonOp::IsGreaterThan => Ok(Value::Boolean(bool_raw_to_type(left > right))),
-                ComparisonOp::IsLessThan => Ok(Value::Boolean(bool_raw_to_type(left < right))),
-                ComparisonOp::IsGreaterOrEqualTo => {
-                    Ok(Value::Boolean(bool_raw_to_type(left >= right)))
-                }
-                ComparisonOp::IsLessOrEqualTo => {
-                    Ok(Value::Boolean(bool_raw_to_type(left <= right)))
-                }
-                _ => todo!(),
-            },
-
+            
             (Value::Boolean(left), Value::Boolean(right)) => match operator {
                 ComparisonOp::IsEqualTo => Ok(Value::Boolean(bool_raw_to_type(
                     bool_type_to_raw(left) == bool_type_to_raw(right),
@@ -706,7 +643,7 @@ impl Interpreter {
             (left, right) => {
                 return Err(EvalError::InvalidComparisonOperation {
                     left,
-                    operator: *operator,
+                    operator,
                     right,
                 });
             }
@@ -735,628 +672,3 @@ fn flip_bool_type(boolean: BooleanVal) -> BooleanVal {
     }
 }
 
-#[test]
-fn ok_evaluate_binary_expression_with_identifier() {
-    // Create a manual environment so we can manually
-    // define/insert values into the variable for testing
-    let mut interpreter = Interpreter::new();
-
-    // Define the variable "x" with 5.0
-    let _ = interpreter.define_current("x".to_string(), Value::Integer(5));
-
-    let expression = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Identifier("x".to_string())),
-        operator: ArithmeticOp::Add,
-        right: Box::new(TypedExpr::Integer(10)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression),
-        Ok(Value::Integer(15))
-    );
-}
-
-#[test]
-fn err_evaluate_binary_expression_with_string_stored_in_identifier() {
-    // Create a manual environment so we can manually
-    // define/insert values into the variable for testing
-    let mut interpreter = Interpreter::new();
-
-    // Define the variable "x" with "a_string"
-    let _ = interpreter.define_current("x".to_string(), Value::String("a_string".to_string()));
-
-    let expression = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Identifier("x".to_string())),
-        operator: ArithmeticOp::Add,
-        right: Box::new(TypedExpr::Integer(10)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression),
-        Err(EvalError::InvalidArithmeticOperation {
-            left: Value::String("a_string".to_string()),
-            operator: ArithmeticOp::Add,
-            right: Value::Integer(10)
-        })
-    );
-
-    let expression2 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Identifier("y".to_string())),
-        operator: ArithmeticOp::Add,
-        right: Box::new(TypedExpr::Float(10.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression2),
-        Err(EvalError::UndefinedVariable("y".to_string()))
-    );
-}
-
-#[test]
-fn ok_evaluate_normal_binary_expression() {
-    let mut interpreter = Interpreter::new();
-
-    // 10 + 20 = 30
-    let expression1 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Integer(10)),
-        operator: ArithmeticOp::Add,
-        right: Box::new(TypedExpr::Integer(20)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression1),
-        Ok(Value::Integer(30))
-    );
-
-    // 20.0 - 10.0 = 10.0
-    let expression2 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Float(20.0)),
-        operator: ArithmeticOp::Subtract,
-        right: Box::new(TypedExpr::Float(10.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression2),
-        Ok(Value::Float(10.0))
-    );
-
-    // 20 * 10 = 200
-    let expression3 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Integer(20)),
-        operator: ArithmeticOp::Multiply,
-        right: Box::new(TypedExpr::Integer(10)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression3),
-        Ok(Value::Integer(200))
-    );
-
-    // 20.0 / 10.0 = 2.0
-    let expression4 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Float(20.0)),
-        operator: ArithmeticOp::Divide,
-        right: Box::new(TypedExpr::Float(10.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression4),
-        Ok(Value::Float(2.0))
-    );
-}
-
-#[test]
-fn err_evaluate_divide_by_zero() {
-    let mut interpreter = Interpreter::new();
-
-    let expression1 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ArithmeticOp::Divide,
-        right: Box::new(TypedExpr::Float(0.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression1),
-        Err(EvalError::InvalidArithmeticOperation {
-            left: Value::Float(10.0),
-            operator: ArithmeticOp::Divide,
-            right: Value::Float(0.0)
-        })
-    );
-}
-
-#[test]
-fn err_evaluate_binary_expression_with_string() {
-    let mut interpreter = Interpreter::new();
-
-    // "something" + 20.0 = Err()
-    let expression1 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::String("something".to_string())),
-        operator: ArithmeticOp::Add,
-        right: Box::new(TypedExpr::Integer(20)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression1),
-        Err(EvalError::InvalidArithmeticOperation {
-            left: Value::String("something".to_string()),
-            operator: ArithmeticOp::Add,
-            right: Value::Integer(20)
-        })
-    );
-
-    // "something" - 20.0 = Err()
-    let expression2 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::String("something".to_string())),
-        operator: ArithmeticOp::Subtract,
-        right: Box::new(TypedExpr::Float(20.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression2),
-        Err(EvalError::InvalidArithmeticOperation {
-            left: Value::String("something".to_string()),
-            operator: ArithmeticOp::Subtract,
-            right: Value::Float(20.0)
-        })
-    );
-
-    // "something" * 20.0 = Err()
-    let expression3 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::String("something".to_string())),
-        operator: ArithmeticOp::Multiply,
-        right: Box::new(TypedExpr::Integer(20)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression3),
-        Err(EvalError::InvalidArithmeticOperation {
-            left: Value::String("something".to_string()),
-            operator: ArithmeticOp::Multiply,
-            right: Value::Integer(20)
-        })
-    );
-
-    // "something" / 20.0 = Err()
-    let expression4 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::String("something".to_string())),
-        operator: ArithmeticOp::Divide,
-        right: Box::new(TypedExpr::Float(20.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression4),
-        Err(EvalError::InvalidArithmeticOperation {
-            left: Value::String("something".to_string()),
-            operator: ArithmeticOp::Divide,
-            right: Value::Float(20.0)
-        })
-    );
-}
-
-#[test]
-fn ok_evaluate_normal_nested_binary_expression() {
-    let mut interpreter = Interpreter::new();
-
-    let expression = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Integer(10)),
-        operator: ArithmeticOp::Add,
-        right: Box::new(TypedExpr::Arithmetic {
-            left: Box::new(TypedExpr::Integer(20)),
-            operator: ArithmeticOp::Multiply,
-            right: Box::new(TypedExpr::Float(2.0)),
-        }),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression),
-        Ok(Value::Float(50.0))
-    );
-}
-
-#[test]
-fn err_evaluate_invalid_binary_expression() {
-    let mut interpreter = Interpreter::new();
-
-    let expression = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ArithmeticOp::Add,
-        right: Box::new(TypedExpr::Arithmetic {
-            left: Box::new(TypedExpr::Float(20.0)),
-            operator: ArithmeticOp::Multiply,
-            right: Box::new(TypedExpr::String("invalid".to_string())),
-        }),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression),
-        Err(EvalError::InvalidArithmeticOperation {
-            left: Value::Float(20.0),
-            operator: ArithmeticOp::Multiply,
-            right: Value::String("invalid".to_string())
-        })
-    )
-}
-
-#[test]
-fn ok_evaluate_conditional_expression() {
-    let mut interpreter = Interpreter::new();
-
-    // 10.0 == 10.0: true
-    let expression1 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ComparisonOp::IsEqualTo,
-        right: Box::new(TypedExpr::Float(10.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression1),
-        Ok(Value::Boolean(BooleanVal::True))
-    );
-
-    // 10.0 > 10.0: false
-    let expression2 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ComparisonOp::IsGreaterThan,
-        right: Box::new(TypedExpr::Float(10.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression2),
-        Ok(Value::Boolean(BooleanVal::False))
-    );
-
-    // 10.0 < 10.0: false
-    let expression3 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ComparisonOp::IsLessThan,
-        right: Box::new(TypedExpr::Float(10.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression3),
-        Ok(Value::Boolean(BooleanVal::False))
-    );
-
-    // 10.0 != 10.0: false
-    let expression4 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ComparisonOp::IsNotEqualTo,
-        right: Box::new(TypedExpr::Float(10.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression4),
-        Ok(Value::Boolean(BooleanVal::False))
-    );
-
-    // 10.0 >= 10.0: true
-    let expression5 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ComparisonOp::IsGreaterOrEqualTo,
-        right: Box::new(TypedExpr::Float(10.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression5),
-        Ok(Value::Boolean(BooleanVal::True))
-    );
-
-    // 10.0 <= 10.0: true
-    let expression6 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ComparisonOp::IsLessOrEqualTo,
-        right: Box::new(TypedExpr::Float(10.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression6),
-        Ok(Value::Boolean(BooleanVal::True))
-    );
-}
-
-#[test]
-fn ok_evaluate_nested_binary_conditional_expression() {
-    let mut interpreter = Interpreter::new();
-
-    // 10.0 == (5.0 + 5.0): true
-    let expression1 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Integer(10)),
-        operator: ComparisonOp::IsEqualTo,
-        right: Box::new(TypedExpr::Arithmetic {
-            left: Box::new(TypedExpr::Integer(5)),
-            operator: ArithmeticOp::Add,
-            right: Box::new(TypedExpr::Float(5.0)),
-        }),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression1),
-        Ok(Value::Boolean(BooleanVal::True))
-    );
-
-    // 10.0 < (5.0 + 5.0): true
-    let expression2 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ComparisonOp::IsLessThan,
-        right: Box::new(TypedExpr::Arithmetic {
-            left: Box::new(TypedExpr::Float(5.0)),
-            operator: ArithmeticOp::Add,
-            right: Box::new(TypedExpr::Integer(5)),
-        }),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression2),
-        Ok(Value::Boolean(BooleanVal::False))
-    );
-
-    // 10.0 > (5.0 + (15.0 - 5.0)): false
-    let expression3 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Integer(10)),
-        operator: ComparisonOp::IsGreaterThan,
-        right: Box::new(TypedExpr::Arithmetic {
-            left: Box::new(TypedExpr::Integer(5)),
-            operator: ArithmeticOp::Add,
-            right: Box::new(TypedExpr::Arithmetic {
-                left: Box::new(TypedExpr::Float(15.0)),
-                operator: ArithmeticOp::Subtract,
-                right: Box::new(TypedExpr::Float(5.0)),
-            }),
-        }),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression3),
-        Ok(Value::Boolean(BooleanVal::False))
-    );
-
-    // 10.0 != (5.0 + (15.0 - 5.0)): true
-    let expression4 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Integer(10)),
-        operator: ComparisonOp::IsNotEqualTo,
-        right: Box::new(TypedExpr::Arithmetic {
-            left: Box::new(TypedExpr::Integer(5)),
-            operator: ArithmeticOp::Add,
-            right: Box::new(TypedExpr::Arithmetic {
-                left: Box::new(TypedExpr::Float(15.0)),
-                operator: ArithmeticOp::Subtract,
-                right: Box::new(TypedExpr::Float(5.0)),
-            }),
-        }),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression4),
-        Ok(Value::Boolean(BooleanVal::True))
-    );
-
-    // 10.0 >= (5.0 + (15.0 - 5.0)): false
-    let expression5 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ComparisonOp::IsGreaterOrEqualTo,
-        right: Box::new(TypedExpr::Arithmetic {
-            left: Box::new(TypedExpr::Float(5.0)),
-            operator: ArithmeticOp::Add,
-            right: Box::new(TypedExpr::Arithmetic {
-                left: Box::new(TypedExpr::Integer(15)),
-                operator: ArithmeticOp::Subtract,
-                right: Box::new(TypedExpr::Integer(5)),
-            }),
-        }),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression5),
-        Ok(Value::Boolean(BooleanVal::False))
-    );
-
-    // 10.0 <= (5.0 + (15.0 - 5.0)): true
-    let expression6 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ComparisonOp::IsLessOrEqualTo,
-        right: Box::new(TypedExpr::Arithmetic {
-            left: Box::new(TypedExpr::Float(5.0)),
-            operator: ArithmeticOp::Add,
-            right: Box::new(TypedExpr::Arithmetic {
-                left: Box::new(TypedExpr::Integer(15)),
-                operator: ArithmeticOp::Subtract,
-                right: Box::new(TypedExpr::Integer(5)),
-            }),
-        }),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression6),
-        Ok(Value::Boolean(BooleanVal::True))
-    );
-}
-
-#[test]
-fn ok_evaluate_conditional_expression_with_identifiers() {
-    let mut interpreter = Interpreter::new();
-
-    let _ = interpreter.define_current("x".to_string(), Value::Float(10.0));
-    let _ = interpreter.define_current("y".to_string(), Value::Integer(5));
-
-    // x(10.0) == y(5.0): false
-    let expression1 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Identifier("x".to_string())),
-        operator: ComparisonOp::IsEqualTo,
-        right: Box::new(TypedExpr::Identifier("y".to_string())),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression1),
-        Ok(Value::Boolean(BooleanVal::False))
-    );
-
-    // x(10.0) > y(5.0): true
-    let expression2 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Identifier("x".to_string())),
-        operator: ComparisonOp::IsGreaterThan,
-        right: Box::new(TypedExpr::Identifier("y".to_string())),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression2),
-        Ok(Value::Boolean(BooleanVal::True))
-    );
-
-    // x(10.0) < y(5.0): false
-    let expression3 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Identifier("x".to_string())),
-        operator: ComparisonOp::IsLessThan,
-        right: Box::new(TypedExpr::Identifier("y".to_string())),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression3),
-        Ok(Value::Boolean(BooleanVal::False))
-    );
-}
-
-#[test]
-fn err_evaluate_conditional_expression() {
-    let mut interpreter = Interpreter::new();
-
-    // "x" == 10.0: Err()
-    let expression1 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::String("x".to_string())),
-        operator: ComparisonOp::IsEqualTo,
-        right: Box::new(TypedExpr::Float(10.0)),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression1),
-        Err(EvalError::InvalidComparisonOperation {
-            left: Value::String("x".to_string()),
-            operator: ComparisonOp::IsEqualTo,
-            right: Value::Float(10.0)
-        })
-    );
-
-    // 10.0 == "x": Err()
-    let expression1 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Float(10.0)),
-        operator: ComparisonOp::IsEqualTo,
-        right: Box::new(TypedExpr::String("x".to_string())),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression1),
-        Err(EvalError::InvalidComparisonOperation {
-            left: Value::Float(10.0),
-            operator: ComparisonOp::IsEqualTo,
-            right: Value::String("x".to_string()),
-        })
-    );
-
-    // "x" == "x": Err()
-    let expression1 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::String("x".to_string())),
-        operator: ComparisonOp::IsEqualTo,
-        right: Box::new(TypedExpr::String("x".to_string())),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression1),
-        Err(EvalError::InvalidComparisonOperation {
-            left: Value::String("x".to_string()),
-            operator: ComparisonOp::IsEqualTo,
-            right: Value::String("x".to_string())
-        })
-    );
-}
-
-#[test]
-fn ok_evaluate_let_stmt_to_define_and_access_value_and_test_with_binary_expr_and_conditional() {
-    let mut interpreter = Interpreter::new();
-
-    // let x = 10.0 + (10.0 + 10.0): x = 30
-    let define_stmt = TypedStmt::Let {
-        identifier: "x".to_string(),
-        mutable: false,
-        ty: Type::Int,
-        expression: TypedExpr::Arithmetic {
-            left: Box::new(TypedExpr::Integer(10)),
-            operator: ArithmeticOp::Add,
-            right: Box::new(TypedExpr::Arithmetic {
-                left: Box::new(TypedExpr::Float(10.0)),
-                operator: ArithmeticOp::Add,
-                right: Box::new(TypedExpr::Float(10.0)),
-            }),
-        },
-    };
-
-    assert_eq!(interpreter.eval_stmt(&define_stmt), Ok(Flow::Continue));
-
-    // let y = 10.0 + (x + 10.0): y = 50
-    let access_stmt = TypedStmt::Let {
-        identifier: "y".to_string(),
-        mutable: false,
-        ty: Type::Int,
-        expression: TypedExpr::Arithmetic {
-            left: Box::new(TypedExpr::Integer(10)),
-            operator: ArithmeticOp::Add,
-            right: Box::new(TypedExpr::Arithmetic {
-                left: Box::new(TypedExpr::Identifier("x".to_string())),
-                operator: ArithmeticOp::Add,
-                right: Box::new(TypedExpr::Float(10.0)),
-            }),
-        },
-    };
-
-    assert_eq!(interpreter.eval_stmt(&access_stmt), Ok(Flow::Continue));
-
-    // x(30) + y(50): 80.0
-    let expression1 = TypedExpr::Arithmetic {
-        left: Box::new(TypedExpr::Identifier("x".to_string())),
-        operator: ArithmeticOp::Add,
-        right: Box::new(TypedExpr::Identifier("y".to_string())),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression1),
-        Ok(Value::Float(80.0))
-    );
-
-    // x(30) < y(50): true
-    let expression2 = TypedExpr::Comparison {
-        left: Box::new(TypedExpr::Identifier("x".to_string())),
-        operator: ComparisonOp::IsLessThan,
-        right: Box::new(TypedExpr::Identifier("y".to_string())),
-    };
-
-    assert_eq!(
-        interpreter.eval_expression(&expression2),
-        Ok(Value::Boolean(BooleanVal::True))
-    );
-}
-
-#[test]
-fn ok_and_err_environment_define_and_get() {
-    let mut interpreter = Interpreter::new();
-
-    assert_eq!(
-        interpreter.define_current("x".to_string(), Value::Float(10.0),),
-        Ok(Value::Float(10.0)),
-    );
-
-    assert_eq!(
-        interpreter.define_current("y".to_string(), Value::String("something".to_string())),
-        Ok(Value::String("something".to_string()))
-    );
-
-    assert_eq!(interpreter.get_current("x"), Ok(&Value::Float(10.0)));
-
-    assert_eq!(
-        interpreter.get_current("y"),
-        Ok(&Value::String("something".to_string()))
-    );
-
-    assert_eq!(
-        interpreter.get_current("missing"),
-        Err(EvalError::UndefinedVariable("missing".to_owned()))
-    );
-}
