@@ -490,6 +490,27 @@ impl TypeChecker {
     ) -> Result<TypedExpr> {
         let typed_operand = self.check_expression(operand)?;
 
+        // If the operator is increment or decrement, we need an identifier
+        // which is to be incremented/decremented; it doesn't work on integers
+        // or other expressions
+        // 
+        // And to increment/decrement the identifier's value, it needs to be mutable
+        // so we check that condition
+        if matches!(operator, UnaryOp::Increment | UnaryOp::Decrement) {
+            let RawExpr::Identifier(name) = operand else {
+                return Err(TypeError::InvalidMutationTarget)
+            };
+
+            let binding = self
+                .environment
+                .lookup(name)
+                .ok_or_else(|| TypeError::UndefinedVariable(name.clone()))?;
+
+            if !binding.mutable {
+                return Err(TypeError::ImmutableAssignment(name.clone()));
+            }
+        }
+        
         let operand_ty = typed_operand.ty;
         
         let result_type = operator

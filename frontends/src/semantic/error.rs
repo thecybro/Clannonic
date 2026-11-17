@@ -14,6 +14,8 @@ pub enum TypeError {
     DuplicateVariable(String),
 
     DuplicateFunctionDeclaration(String),
+
+    InvalidMutationTarget,
     
     ImmutableAssignment(String),
 
