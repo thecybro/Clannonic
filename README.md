@@ -1,4 +1,4 @@
-# Clannonic
+# Rupple
 
 The language that aims to give you simplicity like C/zig
 while removing as much overhead as possible between you and the OS,

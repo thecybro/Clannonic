@@ -1,8 +1,8 @@
 
 use std::rc::Rc;
 
-use frontends::Type;
-use frontends::{
+use rupple_frontend::Type;
+use rupple_frontend::{
     BooleanVal,
     FunctionParameter,
     // TypedExpr,

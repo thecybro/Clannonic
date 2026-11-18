@@ -1,14 +1,9 @@
-//! This is the language I am experimenting with, whose name is not yet
-//! decided but I am going with **clannonic** for now.
-//! 
-//! For now, it's just a test crate but later when it can run/evaluate basic code,
-//! I am planning to integrate it with my other project **Clanix** to make it the
-//! programatic/scripting layer for it allowing users to automate the tasks
-//! in **Clanix** instead of having to do all things manually.
-//! 
-//! You can find the information about **Clanix**; a developer tool at 
-//! [Clanix](https://github.com/Clannon-Labs/Clanix)
-//!
+//! The language that aims to give you simplicity like C/zig
+//! while removing as much overhead as possible between you and the OS,
+//! while also making it harder for you to make mistakes by making
+//! you control the data flow explicitly and with intent, so you
+//! dont have to fight the borrow checker which gets annoying sometimes
+
 
 use std::{
     env,
@@ -17,7 +12,7 @@ use std::{
 
 /// A simple glue for the lexer and parser (and evaluater/code generator later)
 /// which calls and takes return value from one and gives it to other
-fn main() -> clannonic::Result<()> {
+fn main() -> rupple::Result<()> {
     let args: Vec<String> = env::args().collect();
     let mut path = String::new();
 
@@ -25,12 +20,12 @@ fn main() -> clannonic::Result<()> {
     if args.len() > 1 {
         path = args[1].clone();
     } else {
-        println!("Clannonic")
+        println!("Rupple")
     }
 
     let msg = format!("Couldn't read file {path}");
 
     let source = fs::read_to_string(path.trim()).expect(&msg);
 
-    clannonic::run(&source)
+    rupple::run(&source)
 }

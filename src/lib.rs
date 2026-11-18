@@ -1,20 +1,15 @@
-//! This is the language I am experimenting with, whose name is not yet
-//! decided but I am going with **clannonic** for now.
-//!
-//! For now, it's just a test crate but later when it can run/evaluate basic code,
-//! I am planning to integrate it with my other project **Clanix** to make it the
-//! programatic/scripting layer for it allowing users to automate the tasks
-//! in **Clanix** instead of having to do all things manually.
-//!
-//! You can find the information about **Clanix**; a developer tool at
-//! [Clanix](https://github.com/Clannon-Labs/Clanix)
-//!
+//! The language that aims to give you simplicity like C/zig
+//! while removing as much overhead as possible between you and the OS,
+//! while also making it harder for you to make mistakes by making
+//! you control the data flow explicitly and with intent, so you
+//! dont have to fight the borrow checker which gets annoying sometimes
+
 mod tests;
-pub use backends::{
+pub use rupple_interpreter::{
     EvalError,
     Interpreter,
 };
-pub use frontends::{
+pub use rupple_frontend::{
     LexError,
     ParseError,
     TypeError,

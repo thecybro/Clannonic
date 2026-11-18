@@ -3,20 +3,20 @@
 version = 4
 
 [[package]]
-name = "backends"
+name = "rupple"
 version = "0.1.0"
 dependencies = [
- "frontends",
+ "rupple_frontend",
+ "rupple_interpreter",
 ]
 
 [[package]]
-name = "clannonic"
+name = "rupple_frontend"
 version = "0.1.0"
-dependencies = [
- "backends",
- "frontends",
-]
 
 [[package]]
-name = "frontends"
+name = "rupple_interpreter"
 version = "0.1.0"
+dependencies = [
+ "rupple_frontend",
+]

@@ -1,5 +1,5 @@
 [package]
-name = "backends"
+name = "rupple_interpreter"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,4 +7,4 @@ edition = "2024"
 doctest = false
 
 [dependencies]
-frontends = { path = "../frontends" }
+rupple_frontend = { path = "../rupple_frontend" }

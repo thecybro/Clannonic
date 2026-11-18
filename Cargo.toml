@@ -1,10 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["backends", "frontends"]
+members = ["crates/*"]
 
 
 [package]
-name = "clannonic"
+name = "rupple"
 version = "0.1.0"
 edition = "2024"
 
@@ -12,5 +12,5 @@ edition = "2024"
 doctest = false
 
 [dependencies]
-backends = { path = "backends" }
-frontends = { path = "frontends" }
+rupple_interpreter = { path = "crates/rupple_interpreter", version = "0.1.0" }
+rupple_frontend = { path = "crates/rupple_frontend", version = "0.1.0" }

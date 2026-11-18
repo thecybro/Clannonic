@@ -1,12 +1,12 @@
 
-use frontends::{
+use rupple_frontend::{
     ArithmeticOp,
     ComparisonOp,
     UnaryOp,
     UnaryFixity,
     AssignOp,
 };
-use frontends::{
+use rupple_frontend::{
     TypedStmt,
     TypedExpr,
 };

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, hash_map::Entry};
 use std::rc::Rc;
 
-use frontends::{ArithmeticOp, AssignOp, ComparisonOp, Type, UnaryFixity, UnaryOp};
-use frontends::{BooleanVal, FunctionParameter, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
+use rupple_frontend::{ArithmeticOp, AssignOp, ComparisonOp, Type, UnaryFixity, UnaryOp};
+use rupple_frontend::{BooleanVal, FunctionParameter, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
 
 use super::{EnvId, Environment, EvalError, Flow, Function, Interpreter, Result, Value};
 
