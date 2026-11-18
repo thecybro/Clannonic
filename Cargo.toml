@@ -7,9 +7,23 @@ members = ["crates/*"]
 name = "rupple"
 version = "0.1.0"
 edition = "2024"
+description = "A minimal language with rust-like syntax that aims to make writing programs easier for programmers without taking away security"
+readme = "README"
+license = "MIT or Apache"
+repository = "https://github.com/thecybro/Rupple"
+homepage = "https://github.com/thecybro/Rupple"
+keywords = ["language", "parser", "lexer", "compiler", "intrepreter", "rupple"]
+categories = ["compilers", "development-tools::compilers", "language", "intrepreter", "vm"]
+
 
 [lib]
+name = "rupple"
+path = "src/lib.rs"
 doctest = false
+
+[[bin]]
+name = "rupple"
+path = "src/main.rs"
 
 [dependencies]
 rupple_interpreter = { path = "crates/rupple_interpreter", version = "0.1.0" }
