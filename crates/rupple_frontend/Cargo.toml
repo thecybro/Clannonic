@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/thecybro/Rupple"
 homepage = "https://github.com/thecybro/Rupple"
 keywords = ["language", "parser", "lexer", "compiler", "rupple"]
-categories = ["compilers", "development-tools::compilers", "language"]
+categories = ["compilers"]
 
 [lib]
 doctest = false

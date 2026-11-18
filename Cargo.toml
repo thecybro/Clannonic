@@ -8,12 +8,12 @@ name = "rupple"
 version = "0.1.0"
 edition = "2024"
 description = "A minimal language with rust-like syntax that aims to make writing programs easier for programmers without taking away security"
-readme = "README"
-license = "MIT or Apache"
+readme = "README.md"
+license = "MIT"
 repository = "https://github.com/thecybro/Rupple"
 homepage = "https://github.com/thecybro/Rupple"
 keywords = ["language", "parser", "lexer", "compiler", "intrepreter", "rupple"]
-categories = ["compilers", "development-tools::compilers", "language", "intrepreter", "vm"]
+categories = ["compilers"]
 
 
 [lib]
