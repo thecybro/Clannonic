@@ -10,7 +10,7 @@ use super::{
 
 use crate::language::Type;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LexError {
     InvalidCharacter {
         character: char,

@@ -17,7 +17,7 @@ pub struct TypeChecker {
     curr_ret_type: Option<Type>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionSignature {
     pub parameters: Box<[Type]>,
     pub return_type: Type,
@@ -38,7 +38,7 @@ impl TypeChecker {
         }
     }
 
-    pub fn check_program(&mut self, program: &RawProgram) -> Result<TypedProgram> {
+    pub fn check_program(&mut self, program: RawProgram) -> Result<TypedProgram> {
         for stmt in program.ast.iter() {
             // println!("Collecting function signatures");
             self.collect_function_signature(stmt)?;

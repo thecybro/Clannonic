@@ -1,29 +1,6 @@
 #![cfg(test)]
 
-use crate::{
-    Result,
-    Error,
-    
-    Lexer,
-    Parser,
-    Type,
-    TypeError,
-    TypeChecker,
-    TypedProgram,
-    // Interpreter,
-};
-use rupple_frontend::ArithmeticOp;
-
-pub fn checked_program(source: &str) -> Result<TypedProgram> {
-    let tokens = Lexer::new(source)
-        .lex()?;
-    
-    let raw_program = Parser::new(tokens)
-        .parse()?;
-    
-    Ok(TypeChecker::new()
-        .check_program(&raw_program)?)
-}
+use rupple_frontend::{ArithmeticOp, checked_program, RuppleFrontendError, TypeError, Type};
 
 
 #[test]
@@ -32,7 +9,7 @@ fn checker_rejects_non_integer_addition() {
 
     assert!(matches!(
         result,
-        Err(Error::TypeError(
+        Err(RuppleFrontendError::Type(
             TypeError::InvalidArithmeticOperation{
                 left: Type::Bool,
                 operator: ArithmeticOp::Add,

@@ -5,6 +5,7 @@
 //! dont have to fight the borrow checker which gets annoying sometimes
 
 mod tests;
+use rupple_frontend::RuppleFrontendError;
 pub use rupple_interpreter::{
     EvalError,
     Interpreter,
@@ -18,39 +19,26 @@ pub use rupple_frontend::{
     Parser,
     Type,
     TypeChecker,
-    TypedProgram
+    TypedProgram,
+    checked_program,
 };
 
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
-    LexError(LexError),
-    ParseError(ParseError),
-    TypeError(TypeError),
-    EvalError(EvalError),
+    Frontend(RuppleFrontendError),
+    Interpreter(EvalError),
 }
 
-impl From<ParseError> for Error {
-    fn from(err: ParseError) -> Self {
-        Error::ParseError(err)
+impl From<RuppleFrontendError> for Error {
+    fn from(err: RuppleFrontendError) -> Self {
+        Error::Frontend(err)
     }
 }
 
 impl From<EvalError> for Error {
     fn from(err: EvalError) -> Self {
-        Error::EvalError(err)
-    }
-}
-
-impl From<LexError> for Error {
-    fn from(err: LexError) -> Self {
-        Error::LexError(err)
-    }
-}
-
-impl From<TypeError> for Error {
-    fn from(err: TypeError) -> Self {
-        Error::TypeError(err)
+        Error::Interpreter(err)
     }
 }
 
@@ -59,20 +47,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// A simple glue for the lexer and parser (and Interpreter/code generator later)
 /// which calls and takes return value from one and gives it to other
 pub fn run(source: &str) -> Result<()> {
-    let tokens = Lexer::new(source).lex()?;
-    // println!("{tokens:#?}");
-
-    let program = Parser::new(tokens).parse()?;
-    // println!("{program:#?}");
-
-    let typed_program = TypeChecker::new().check_program(&program)?;
-
-    // println!("{typed_program:#?}");
+    let typed_program = checked_program(source)?;
     
-    // The checker currently validates the RawProgram and also returns
-    // the validated frontends::Program. So we are not passing raw parser nodes to a
-    // backend; execution will be reconnected when the checker emits Program.
-
     Interpreter::new().evaluate(&typed_program)?;
     Ok(())
 }
@@ -104,5 +80,12 @@ fn test_immutable_assignment_on_unary_expression() {
     let source = "let x = 1;
     x++;";
 
-    assert_eq!(run(&source), Err(Error::TypeError(TypeError::ImmutableAssignment("x".to_string()))))
+    assert_eq!(run(&source), Err(
+        Error::Frontend(
+            RuppleFrontendError::Type(
+                    TypeError::ImmutableAssignment("x".to_string())
+                )
+            )
+        )
+    )
 }
