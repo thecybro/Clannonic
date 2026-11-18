@@ -38,7 +38,7 @@ pub enum EvalError {
     },
     InvalidUnaryOperation {
         operator: UnaryOp,
-        operand: Box<TypedExpr>,
+        operand: TypedExpr,
         fixity: UnaryFixity
     },
     InvalidAssignOperation {

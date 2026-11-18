@@ -28,11 +28,7 @@ impl AssignOp {
                 // convert the assignment operator to the corresponding
                 // arithmetic operator and let it tell whether or not
                 // the operation is valid
-                if let Some(_) = arith_op.result_type(left, right) {
-                    true
-                } else {
-                    false
-                }
+                arith_op.result_type(left, right).is_some()
             }
 
             AssignOp::Assign 

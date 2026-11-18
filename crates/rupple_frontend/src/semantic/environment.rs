@@ -16,6 +16,12 @@ pub struct Binding {
     pub mutable: bool,
 }
 
+impl Default for TypeEnvironment {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TypeEnvironment {
     pub fn new() -> Self {
         Self {

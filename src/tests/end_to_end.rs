@@ -7,11 +7,12 @@ use crate::{
     Lexer,
     Parser,
     Type,
+    TypeError,
     TypeChecker,
     TypedProgram,
     // Interpreter,
 };
-use frontends::ArithmeticOp;
+use rupple_frontend::ArithmeticOp;
 
 pub fn checked_program(source: &str) -> Result<TypedProgram> {
     let tokens = Lexer::new(source)
@@ -32,7 +33,7 @@ fn checker_rejects_non_integer_addition() {
     assert!(matches!(
         result,
         Err(Error::TypeError(
-            frontends::TypeError::InvalidArithmeticOperation{
+            TypeError::InvalidArithmeticOperation{
                 left: Type::Bool,
                 operator: ArithmeticOp::Add,
                 right: Type::Int

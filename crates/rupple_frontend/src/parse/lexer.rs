@@ -108,25 +108,13 @@ impl<'a> Lexer<'a> {
 
             // the span of the tokenkind or lexeme whose token is this
             span: Span {
-                start: start,
+                start,
                 end: self.position
             }
         }
     }
 
-    /// If the current character is whitespace, keep advancing to the next position
-    fn skip_whitespace(&mut self) {
-        while let Some(current) = self.current() {
-            if current.is_whitespace()
-            && !matches!(current, '\n' | '\r') {
-                self.advance()
-            } else {
-                break
-            }
-        }
-    }
-
-    // Skip anything irrelevant like line comments and whitespaces/newlines (for now)
+    /// Skip anything irrelevant like line comments and whitespaces/newlines (for now)
     fn skip_ignored(&mut self) {
         loop {
             while let Some(character) = self.current() {
@@ -159,17 +147,6 @@ impl<'a> Lexer<'a> {
         }
     }
     
-    fn is_next_whitespace(&self) -> bool {
-        while let Some(next) = self.peek() {
-            if next.is_whitespace() {
-                return true
-            } else {
-                return false
-            }
-        } 
-        return false
-    }
-
     /// Check if the current character is a valid identifier,
     /// If it is, keep consuming until you find what is not valid
     /// 
@@ -258,7 +235,7 @@ impl<'a> Lexer<'a> {
 
         // We ideally wont reach in this line but if we somehow
         // reach here, some problem has occured
-        return Err(LexError::UnterminatedString { 
+        Err(LexError::UnterminatedString { 
             span: Span {
                 start,
                 end: self.position
@@ -421,14 +398,14 @@ impl<'a> Lexer<'a> {
             '|' if self.peek() == Some('|') => {
                 self.advance();
                 self.advance();
-                return Ok(self.token(TokenKind::OrOr, start))
+                Ok(self.token(TokenKind::OrOr, start))
             },
             '&' if self.peek() == Some('&') => {
                 self.advance();
                 self.advance();
-                return Ok(self.token(TokenKind::AndAnd, start))
+                Ok(self.token(TokenKind::AndAnd, start))
             },
-            _ => return Err(LexError::InvalidCharacter { 
+            _ => Err(LexError::InvalidCharacter { 
                 character, 
                 span: Span {
                     start,

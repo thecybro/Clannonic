@@ -1,6 +1,6 @@
 use crate::language::{ArithmeticOp, AssignOp, ComparisonOp, Type, UnaryFixity, UnaryOp};
 
-use super::super::parser::BooleanVal;
+use super::super::parse::BooleanVal;
 
 /// Validated program representation consumed by language backends.
 ///

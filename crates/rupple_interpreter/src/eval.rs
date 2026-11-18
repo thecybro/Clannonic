@@ -6,6 +6,12 @@ use rupple_frontend::{BooleanVal, FunctionParameter, TypedExpr, TypedExprKind, T
 
 use super::{EnvId, Environment, EvalError, Flow, Function, Interpreter, Result, Value};
 
+impl Default for Interpreter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Interpreter {
     pub fn new() -> Self {
         let global_id = EnvId(0);
@@ -33,14 +39,14 @@ impl Interpreter {
         // the call to define_current() will get you global id
         // So stuff would be saved in global as well
         for stmt in program.ast.iter() {
-            let _ = self.eval_function_signatures(&stmt)?;
+            let _ = self.eval_function_signatures(stmt)?;
         }
 
         for stmt in program.ast.iter() {
             // Evaluate the statement only if it is not a function
             // because we have already registered all functions
             if !matches!(stmt, TypedStmt::Function { .. }) {
-                let _ = self.eval_stmt(&stmt)?;
+                let _ = self.eval_stmt(stmt)?;
             }
         }
 
@@ -111,9 +117,9 @@ impl Interpreter {
             // The entry already exists; which is an error when trying to initialize
             // an entry, so we throw the error
             Entry::Occupied(_) => {
-                return Err(EvalError::DuplicateVariable(format!(
+                Err(EvalError::DuplicateVariable(format!(
                     "The variable '{name}' already exists"
-                )));
+                )))
             }
         }
     }
@@ -142,7 +148,7 @@ impl Interpreter {
             current = environment.parent;
         }
 
-        Err(EvalError::UndefinedVariable(format!("{name}")))
+        Err(EvalError::UndefinedVariable(name.to_string()))
     }
 
     /// Start from the current id and see if the identifier we have gotten is present
@@ -283,16 +289,13 @@ impl Interpreter {
     }
 
     fn eval_function_signatures(&mut self, stmt: &TypedStmt) -> Result<Flow> {
-        match stmt {
-            TypedStmt::Function {
-                name,
-                parameters,
-                return_type,
-                body,
-            } => {
-                self.eval_function_stmt(name, parameters, *return_type, body)?;
-            }
-            _ => {}
+        if let TypedStmt::Function {
+            name,
+            parameters,
+            return_type,
+            body
+        } = stmt {
+            self.eval_function_stmt(name, parameters, *return_type, body)?;
         }
 
         Ok(Flow::Continue)
@@ -319,7 +322,7 @@ impl Interpreter {
 
     fn eval_return_stmt(&mut self, expression: Option<&TypedExpr>) -> Result<Value> {
         if let Some(expr) = expression {
-            return self.eval_expression(expr);
+            self.eval_expression(expr)
         } else {
             Ok(Value::Unit)
         }
@@ -361,7 +364,7 @@ impl Interpreter {
         self.assign_current(identifier, value)
     }
 
-    fn eval_if_stmt(&mut self, condition: &TypedExpr, body: &Box<[TypedStmt]>) -> Result<Flow> {
+    fn eval_if_stmt(&mut self, condition: &TypedExpr, body: &[TypedStmt]) -> Result<Flow> {
         if self.eval_expression(condition)? == Value::Boolean(BooleanVal::True) {
             self.eval_block(body)
         } else {
@@ -369,7 +372,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_while_stmt(&mut self, condition: &TypedExpr, body: &Box<[TypedStmt]>) -> Result<Flow> {
+    fn eval_while_stmt(&mut self, condition: &TypedExpr, body: &[TypedStmt]) -> Result<Flow> {
         while self.eval_expression(condition)? == Value::Boolean(BooleanVal::True) {
             match self.eval_block(body)? {
                 Flow::Continue => {}
@@ -397,17 +400,17 @@ impl Interpreter {
     fn eval_function_stmt(
         &mut self,
         name: &str,
-        parameters: &Box<[FunctionParameter]>,
+        parameters: &[FunctionParameter],
         return_type: Type,
-        body: &Box<[TypedStmt]>,
+        body: &[TypedStmt],
     ) -> Result<Value> {
         // These .clones() can be too expensive too quickly, so we gotta
         // replace it soon
         let function = Function {
             name: name.to_string(),
-            parameters: parameters.clone(),
-            return_type: return_type.clone(),
-            body: body.clone(),
+            parameters: parameters.into(),
+            return_type,
+            body: body.into(),
             closure: self.current,
         };
 
@@ -424,26 +427,26 @@ impl Interpreter {
         match &expression.kind {
             TypedExprKind::Integer(value) => Ok(Value::Integer(*value)),
             TypedExprKind::Identifier(name) => {
-                Ok(self.get_current(&name)?.clone())
+                Ok(self.get_current(name)?.clone())
             }
-            TypedExprKind::Boolean(boolean_literal) => self.eval_boolean_expression(&boolean_literal),
+            TypedExprKind::Boolean(boolean_literal) => self.eval_boolean_expression(boolean_literal),
             TypedExprKind::Arithmetic {
                 left,
                 operator,
                 right,
-            } => self.eval_arithmetic_expression(&left, *operator, &right),
+            } => self.eval_arithmetic_expression(left, *operator, right),
             TypedExprKind::Comparison {
                 left,
                 operator,
                 right,
-            } => self.eval_comparison_expression(&left, *operator, &right),
+            } => self.eval_comparison_expression(left, *operator, right),
             TypedExprKind::Unary {
                 operator,
                 operand,
                 fixity,
-            } => self.eval_unary_expression(*operator, &operand, *fixity),
+            } => self.eval_unary_expression(*operator, operand, *fixity),
             TypedExprKind::FunctionCall { name, arguments } => {
-                self.eval_function_call_expression(&name, &arguments)
+                self.eval_function_call_expression(name, arguments)
             }
             _ => todo!(),
         }
@@ -505,10 +508,10 @@ impl Interpreter {
                 Ok(return_value)
             }
             _ => {
-                return Err(EvalError::ExpressionNotCallable {
+                Err(EvalError::ExpressionNotCallable {
                     error: format!("Given expression '{name}' is not callable"),
                     value: value.clone(),
-                });
+                })
             }
         }
     }
@@ -561,7 +564,7 @@ impl Interpreter {
     fn eval_unary_expression(
         &mut self,
         operator: UnaryOp,
-        operand: &Box<TypedExpr>,
+        operand: &TypedExpr,
         fixity: UnaryFixity,
     ) -> Result<Value> {
         let operand_val = self.eval_expression(operand)?;
@@ -586,11 +589,11 @@ impl Interpreter {
             }
 
             _ => {
-                return Err(EvalError::InvalidUnaryOperation {
+                Err(EvalError::InvalidUnaryOperation {
                     operator,
                     operand: operand.clone(),
                     fixity,
-                });
+                })
             }
         }
     }
@@ -627,10 +630,10 @@ impl Interpreter {
                     bool_type_to_raw(left) != bool_type_to_raw(right),
                 ))),
                 ComparisonOp::IsGreaterThan => Ok(Value::Boolean(bool_raw_to_type(
-                    bool_type_to_raw(left) > bool_type_to_raw(right),
+                    bool_type_to_raw(left) & !bool_type_to_raw(right), // same as a > b for bool
                 ))),
                 ComparisonOp::IsLessThan => Ok(Value::Boolean(bool_raw_to_type(
-                    bool_type_to_raw(left) < bool_type_to_raw(right),
+                    !bool_type_to_raw(left) & bool_type_to_raw(right), // same as a < b for bool
                 ))),
                 ComparisonOp::IsGreaterOrEqualTo => Ok(Value::Boolean(bool_raw_to_type(
                     bool_type_to_raw(left) >= bool_type_to_raw(right),
@@ -641,11 +644,11 @@ impl Interpreter {
                 _ => todo!(),
             },
             (left, right) => {
-                return Err(EvalError::InvalidComparisonOperation {
+                Err(EvalError::InvalidComparisonOperation {
                     left,
                     operator,
                     right,
-                });
+                })
             }
         }
     }

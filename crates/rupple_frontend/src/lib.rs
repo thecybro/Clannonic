@@ -1,9 +1,9 @@
 
-mod parser;
+mod parse;
 mod language;
 mod semantic;
 
-pub use parser::*;
+pub use parse::*;
 pub use language::*;
 pub use semantic::*;
 

@@ -119,15 +119,15 @@ impl<'a> Parser<'a> {
             
             TokenKind::Identifier => {
                 if self.peek_assign_operator().is_some() {
-                    return self.parse_assign_stmt()
+                    self.parse_assign_stmt()
                 } else {
-                    return Ok(self.parse_expression_stmt()?)
+                    self.parse_expression_stmt()
                 }
             },
 
             _ => {
                 let curr_lexeme = self.curr_lexeme()?;
-                return Err(ParseError::KeywordNotSupported(
+                Err(ParseError::KeywordNotSupported(
                     format!("'{curr_lexeme}' doesn't start a valid statement/expression")
                 ))
             }
@@ -186,7 +186,7 @@ impl<'a> Parser<'a> {
 
     /// If and while statements have same 2 things: a conditional expression and
     /// a code block, so they can be parsed in the same way
-    
+    /// 
     /// Parse the section of the tokens that come under the if statement
     fn parse_if_stmt(&mut self) -> Result<RawStmt> {
         self.parse_condition_stmt(Keyword::If)
@@ -281,8 +281,8 @@ impl<'a> Parser<'a> {
 
             Ok(RawStmt::Expression(expr))
         } else {
-            return Err(ParseError::TokenExpected(
-                format!("Expected an identifier to form an expression statement!")
+            Err(ParseError::TokenExpected(
+                "Expected an identifier to form an expression statement!".to_string()
             ))
         }
     }
@@ -496,7 +496,7 @@ impl<'a> Parser<'a> {
                 Ok(RawExpr::FunctionCall {
                     name: identifier,
                     arguments: self.parse_comma_separated(|parser| {
-                        Ok(parser.parse_expression()?)
+                        parser.parse_expression()
                     })?.into_boxed_slice()
                 })
             },
@@ -534,10 +534,10 @@ impl<'a> Parser<'a> {
                 Ok(expr)
             },
             _ => {
-                return Err(
+                Err(
                     ParseError::InvalidToken(
                     token.lexeme.to_string()
-                ));
+                ))
             }
         }
     }
@@ -626,7 +626,7 @@ impl<'a> Parser<'a> {
             }),
 
             _ => {
-                return Err(ParseError::UnsupportedConditionalStatement(
+                Err(ParseError::UnsupportedConditionalStatement(
                     "Unsupported conditional statement was found!\n Use if or while instead".to_string()
                 ))
             }
@@ -841,36 +841,20 @@ impl<'a> Parser<'a> {
     }
 
     fn curr_is_assign_operator(&self) -> bool {
-        if self.current_assign_operator().is_some() {
-            return true
-        } else {
-            false
-        }
+        self.current_assign_operator().is_some()
     }
 
     fn peek_is_assign_operator(&self) -> bool {
-        if self.peek_assign_operator().is_some() {
-            return true
-        } else {
-            false
-        }
+        self.peek_assign_operator().is_some()
     }
 }
 
 /// An external helper for parsing strings to f64
 fn parse_to_f64(input: &str) -> Option<f64> {
-    if let Ok(integer) = input.parse::<f64>() {
-        Some(integer)
-    } else {
-        None
-    }
+    input.parse::<f64>().ok()
 }
 
 /// An external helper for parsing strings to i64
 fn parse_to_i64(input: &str) -> Option<i64> {
-    if let Ok(integer) = input.parse::<i64>() {
-        Some(integer)
-    } else {
-        None
-    }
+    input.parse::<i64>().ok()
 }

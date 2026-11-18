@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{FunctionParameter, TypedExpr, TypedExprKind, TypedProgram, TypedStmt};
-use crate::parser::{RawExpr, RawFunctionParameter, RawProgram, RawStmt};
+use crate::parse::{RawExpr, RawFunctionParameter, RawProgram, RawStmt};
 use crate::{
     Type,
     language::{ArithmeticOp, AssignOp, ComparisonOp, UnaryFixity, UnaryOp},
@@ -21,6 +21,12 @@ pub struct TypeChecker {
 pub struct FunctionSignature {
     pub parameters: Box<[Type]>,
     pub return_type: Type,
+}
+
+impl Default for TypeChecker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TypeChecker {
@@ -133,7 +139,7 @@ impl TypeChecker {
             // Other expressions such as float/string are not yet supported in the
             // current minimal build; even though the interpreter can actually
             // evaluate those
-            _ => return Err(TypeError::UnsupportedExpression(expression.clone())),
+            _ => Err(TypeError::UnsupportedExpression(expression.clone())),
         }
     }
 }
@@ -539,7 +545,7 @@ impl TypeChecker {
     fn define_function(
         &mut self,
         name: String,
-        parameters: &Box<[Type]>,
+        parameters: &[Type],
         return_type: Type,
     ) -> Result<()> {
         if self.functions.contains_key(&name) {
@@ -549,7 +555,7 @@ impl TypeChecker {
         self.functions.insert(
             name.clone(),
             FunctionSignature {
-                parameters: parameters.clone(),
+                parameters: parameters.into(),
                 return_type,
             },
         );
@@ -567,7 +573,7 @@ impl TypeChecker {
                 name,
                 parameters,
                 return_type,
-                body,
+                body: _,
             } => {
                 let mut params = Vec::new();
                 for param in parameters.iter() {
